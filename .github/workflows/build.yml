@@ -8,17 +8,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -28,10 +18,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          Remove-Item -Path package-lock.json -ErrorAction SilentlyContinue
+          npm install
 
       - name: Build
         run: npm run build
@@ -44,14 +35,9 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: petmii-${{ matrix.platform }}
+          name: petmii-windows
           path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.dmg
-            release/*.zip
             release/*.exe
-          if-no-files-found: ignore
 
   release:
     needs: build
@@ -61,7 +47,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Download all artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
