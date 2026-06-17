@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -28,23 +31,18 @@ jobs:
         run: npm run build
 
       - name: Package
-        run: npm run package
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --publish never
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: petmii-windows
-          path: |
-            release/*.exe
+          path: release/*.exe
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
 
     steps:
       - name: Download artifacts
