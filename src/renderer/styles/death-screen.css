@@ -1,0 +1,80 @@
+/* Death/Memorial Screen */
+
+.death-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 16px;
+  padding: 24px;
+  background: #1a1a1a;
+  color: #ccc;
+}
+
+.death-screen h1 {
+  font-size: 3rem;
+  margin: 0;
+}
+
+.death-screen h2 {
+  font-family: "Press Start 2P", monospace;
+  font-size: 1rem;
+  font-weight: 400;
+  color: #888;
+  margin: 0;
+}
+
+.death-screen-memorial {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 20px 28px;
+  text-align: center;
+  margin: 12px 0;
+}
+
+.death-screen-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #eee;
+  margin: 0 0 4px;
+}
+
+.death-screen-info {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0 0 12px;
+}
+
+.death-screen-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.death-screen-dates p {
+  font-size: 0.75rem;
+  color: #666;
+  margin: 0;
+}
+
+.death-screen-message {
+  font-size: 0.8rem;
+  color: #555;
+  margin: 0;
+}
+
+.death-screen-btn {
+  margin-top: 16px;
+  background: #333;
+  color: #ccc;
+  border: 1px solid #555;
+  padding: 10px 24px;
+  font-size: 0.85rem;
+}
+
+.death-screen-btn:hover {
+  background: #444;
+  color: #fff;
+}

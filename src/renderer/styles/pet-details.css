@@ -4,10 +4,48 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px;
-  gap: 20px;
+  padding: 16px;
+  gap: 14px;
   min-height: 100vh;
   overflow-y: auto;
+}
+
+/* Top bar — stats left, overlay/reset right */
+.pet-details-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.pet-details-topbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pet-details-overlay-btn {
+  padding: 5px 12px !important;
+  font-size: 0.75rem !important;
+  background-color: #f0e6ff !important;
+  color: #555 !important;
+}
+
+.pet-details-overlay-btn:hover {
+  background-color: #e0d0ff !important;
+}
+
+.pet-details-reset-btn {
+  padding: 5px 10px !important;
+  font-size: 0.85rem !important;
+  background-color: #f5f5f5 !important;
+  color: #999 !important;
+  min-width: unset !important;
+}
+
+.pet-details-reset-btn:hover {
+  background-color: #eee !important;
+  color: #666 !important;
 }
 
 /* Header section */
@@ -15,109 +53,106 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
-.pet-details-header h1 {
+.pet-details-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pet-details-header .pet-name {
   font-family: "Press Start 2P", monospace;
-  font-size: 1.4rem;
+  font-size: 1rem;
   font-weight: 400;
   color: #333;
   margin: 0;
 }
 
-.pet-details-header .pet-name {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #555;
-  margin: 0;
+.pet-details-rename-icon {
+  background: none !important;
+  border: none !important;
+  padding: 2px !important;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s;
 }
 
-/* Pet info section with variant label */
+.pet-details-rename-icon:hover {
+  opacity: 1;
+  transform: none;
+  background: none !important;
+}
+
 .pet-details-info {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #999;
   margin: 0;
 }
 
-/* Avatar section centered */
+/* Stage & age section */
+.pet-details-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.7rem;
+}
+
+.pet-details-stage-badge {
+  background: #f0e6ff;
+  color: #7c4dff;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.pet-details-age {
+  color: #888;
+}
+
+.pet-details-next-stage {
+  color: #4caf50;
+  font-weight: 500;
+}
+
+/* Avatar section */
 .pet-details-avatar {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
+  padding: 8px 0;
 }
 
 /* Mood indicator */
 .pet-details-mood {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: #666;
   margin: 0;
+  text-transform: capitalize;
 }
 
 /* Stats section */
 .pet-details-stats {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  max-width: 320px;
+  max-width: 300px;
 }
 
-/* Action buttons section */
+/* Action buttons */
 .pet-details-actions {
   display: flex;
   flex-direction: row;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .pet-details-actions button {
-  padding: 10px 18px;
-  font-size: 0.9rem;
-}
-
-/* Message bubble */
-.pet-details-message {
-  background-color: #f5f0ff;
-  border-radius: 16px;
-  padding: 12px 20px;
-  font-size: 0.9rem;
-  color: #555;
-  max-width: 300px;
-  text-align: center;
-  line-height: 1.4;
-}
-
-/* Settings section */
-.pet-details-settings {
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-.pet-details-settings button {
-  padding: 6px 14px;
+  padding: 8px 16px;
   font-size: 0.8rem;
-  background-color: #e8e8e8;
-  color: #666;
-  font-weight: 500;
-}
-
-.pet-details-settings button:hover {
-  background-color: #d8d8d8;
-}
-
-.pet-details-overlay-btn {
-  background-color: #f0e6ff !important;
-  color: #555 !important;
-}
-
-.pet-details-overlay-btn:hover {
-  background-color: #e0d0ff !important;
 }

@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import { registerIpcHandlers } from "./ipcHandlers";
 import { createMainWindow } from "./windowManager";
+import { startDecayTimer } from "./statDecay";
 
 // WSL2/Linux: Must disable hardware acceleration before app is ready
 // when /dev/dri (GPU) is not available
@@ -15,6 +16,7 @@ app.commandLine.appendSwitch("disable-features", "HardwareMediaKeyHandling,Media
 app.whenReady().then(() => {
   registerIpcHandlers();
   createMainWindow();
+  startDecayTimer();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

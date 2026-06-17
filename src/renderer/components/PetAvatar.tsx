@@ -7,6 +7,8 @@ interface PetAvatarProps {
   color: PetColor;
   personality: PetPersonality;
   mood?: string;
+  /** If true, show a static first frame instead of animating */
+  static?: boolean;
 }
 
 function getSpriteSrc(species: string, color: string, mood?: string): string | undefined {
@@ -14,7 +16,7 @@ function getSpriteSrc(species: string, color: string, mood?: string): string | u
   return sprites[species]?.[color]?.[sheet];
 }
 
-export function PetAvatar({ species, color, personality, mood }: PetAvatarProps) {
+export function PetAvatar({ species, color, personality, mood, static: isStatic }: PetAvatarProps) {
   const spriteSrc = getSpriteSrc(species, color, mood);
 
   const fallbackClass = `pet-avatar pet-species-${species} pet-color-${color} pet-personality-${personality}`;
@@ -30,14 +32,9 @@ export function PetAvatar({ species, color, personality, mood }: PetAvatarProps)
 
   return (
     <div
-      className="pet-avatar-container"
+      className={`pet-avatar-container${isStatic ? " pet-avatar-static" : ""}`}
       aria-label={`${species} pet, ${color} colored, ${personality} personality`}
-    >
-      <img
-        className="pet-avatar-spritesheet pixelart"
-        src={spriteSrc}
-        alt={`${species} pet`}
-      />
-    </div>
+      style={{ backgroundImage: `url(${spriteSrc})` }}
+    />
   );
 }

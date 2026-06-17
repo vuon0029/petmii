@@ -11,8 +11,9 @@ export type PetVariant = {
   personality: PetPersonality;
 };
 
-export type PetMood = "happy" | "sad" | "hungry" | "sleepy" | "playful" | "neutral";
+export type PetMood = "happy" | "sad" | "hungry" | "sleepy" | "playful" | "neutral" | "sick" | "dead";
 export type PetLifeStage = "egg" | "baby" | "child" | "adult";
+export type VisualTier = "baby" | "child" | "adult" | "elder" | "legendary";
 
 export interface PetState {
   id: string;
@@ -20,29 +21,44 @@ export interface PetState {
   species: PetSpecies;
   color: PetColor;
   personality: PetPersonality;
+  isShiny: boolean;
+
+  // Stats (0-100)
   hunger: number;
   happiness: number;
   energy: number;
   cleanliness: number;
   bond: number;
+  hp: number; // hidden from UI, 0-100
+
+  // State
+  isAlive: boolean;
   mood: PetMood;
   lifeStage: PetLifeStage;
+
+  // Messages
   lastMessage: string;
+
+  // Timestamps
   lastFedAt: string | null;
   lastPlayedAt: string | null;
   lastCleanedAt: string | null;
   lastRestedAt: string | null;
   hatchedAt: string;
+  diedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export const DEFAULT_PET_STATS = {
-  hunger: 15,
-  happiness: 15,
-  energy: 15,
-  cleanliness: 15,
+  hunger: 75,
+  happiness: 70,
+  energy: 80,
+  cleanliness: 85,
   bond: 10,
+  hp: 100,
+  isShiny: false,
+  isAlive: true,
   mood: "happy" as PetMood,
   lifeStage: "baby" as PetLifeStage,
   lastMessage: "Your new pet hatched!",
@@ -50,6 +66,7 @@ export const DEFAULT_PET_STATS = {
   lastPlayedAt: null,
   lastCleanedAt: null,
   lastRestedAt: null,
+  diedAt: null,
 } as const;
 
 export const SPECIES_DEFAULT_NAMES: Record<PetSpecies, string> = {

@@ -2,6 +2,8 @@ import { BrowserWindow, screen } from "electron";
 import path from "path";
 import { loadPetState } from "./petStorage";
 
+const APP_ICON = path.join(__dirname, "../../build/icon.ico");
+
 let mainWindow: BrowserWindow | null = null;
 let overlayWindow: BrowserWindow | null = null;
 let overlayVisible = false;
@@ -40,6 +42,7 @@ export function createMainWindow(): BrowserWindow {
     width: 400,
     height: 600,
     title: "petmii",
+    icon: APP_ICON,
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),

@@ -19,7 +19,7 @@ export type AppOnboardingState =
 export const VALID_TRANSITIONS: Record<AppOnboardingState, AppOnboardingState[]> = {
   NO_PET: ["EGG_READY"],
   EGG_READY: ["HATCHING"],
-  HATCHING: ["NAMING"],
+  HATCHING: ["ACTIVE_PET"],
   NAMING: ["ACTIVE_PET"],
   ACTIVE_PET: ["EGG_READY"],
 };

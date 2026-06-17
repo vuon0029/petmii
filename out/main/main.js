@@ -9,7 +9,7 @@ function getStoragePath() {
 const VALID_SPECIES = ["mochi", "blob", "bun", "sprout", "ghost", "star"];
 const VALID_COLORS = ["cream", "pink", "blue", "mint", "lavender", "yellow"];
 const VALID_PERSONALITIES = ["sweet", "chaotic", "sleepy", "curious", "shy", "sassy"];
-const VALID_MOODS = ["happy", "sad", "hungry", "sleepy", "playful", "neutral"];
+const VALID_MOODS = ["happy", "sad", "hungry", "sleepy", "playful", "neutral", "sick", "dead"];
 const VALID_LIFE_STAGES = ["egg", "baby", "child", "adult"];
 function isStatValue(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
@@ -29,11 +29,14 @@ function validatePetState(data) {
   if (!VALID_PERSONALITIES.includes(obj.personality)) return false;
   if (!VALID_MOODS.includes(obj.mood)) return false;
   if (!VALID_LIFE_STAGES.includes(obj.lifeStage)) return false;
+  if (typeof obj.isAlive !== "boolean") return false;
+  if (typeof obj.isShiny !== "boolean") return false;
   if (!isStatValue(obj.hunger)) return false;
   if (!isStatValue(obj.happiness)) return false;
   if (!isStatValue(obj.energy)) return false;
   if (!isStatValue(obj.cleanliness)) return false;
   if (!isStatValue(obj.bond)) return false;
+  if (!isStatValue(obj.hp)) return false;
   return true;
 }
 function loadPetState() {
@@ -86,6 +89,51 @@ function clearPetState() {
     return false;
   }
 }
+const GRAVEYARD_FILENAME = "graveyard.json";
+function getGraveyardPath() {
+  return path.join(electron.app.getPath("userData"), GRAVEYARD_FILENAME);
+}
+function loadGraveyard() {
+  const filepath = getGraveyardPath();
+  try {
+    if (!fs.existsSync(filepath)) return [];
+    const raw = fs.readFileSync(filepath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+function saveGraveyard(entries) {
+  const filepath = getGraveyardPath();
+  const dir = path.dirname(filepath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filepath, JSON.stringify(entries, null, 2), "utf-8");
+}
+function saveToGraveyard(pet) {
+  const entries = loadGraveyard();
+  const entry = {
+    id: pet.id,
+    name: pet.name,
+    species: pet.species,
+    color: pet.color,
+    personality: pet.personality,
+    isShiny: pet.isShiny,
+    hatchedAt: pet.hatchedAt,
+    diedAt: pet.diedAt || (/* @__PURE__ */ new Date()).toISOString()
+  };
+  entries.push(entry);
+  saveGraveyard(entries);
+}
+function removeFromGraveyard(id) {
+  const entries = loadGraveyard();
+  const filtered = entries.filter((e) => e.id !== id);
+  saveGraveyard(filtered);
+}
+const APP_ICON = path.join(__dirname, "../../build/icon.ico");
 let mainWindow = null;
 let overlayWindow = null;
 let overlayVisible = false;
@@ -115,6 +163,7 @@ function createMainWindow() {
     width: 400,
     height: 600,
     title: "petmii",
+    icon: APP_ICON,
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
@@ -533,6 +582,231 @@ function registerIpcHandlers() {
   electron.ipcMain.on("window:overlay-drag-end", () => {
     endDrag();
   });
+  electron.ipcMain.handle("graveyard:load", () => loadGraveyard());
+  electron.ipcMain.handle("graveyard:remove", (_, id) => {
+    removeFromGraveyard(id);
+    return true;
+  });
+}
+const SPECIES_TRAITS = {
+  mochi: {
+    decay: { hunger: 1, happiness: 0.8, energy: 1, cleanliness: 1.2, bond: 1 },
+    stages: { babyToChild: 20, childToAdult: 60 },
+    description: "Balanced, gets dirty easily"
+  },
+  blob: {
+    decay: { hunger: 1.3, happiness: 1, energy: 0.7, cleanliness: 1, bond: 1 },
+    stages: { babyToChild: 28, childToAdult: 96 },
+    description: "Always hungry, but chill energy"
+  },
+  bun: {
+    decay: { hunger: 0.8, happiness: 1.2, energy: 1, cleanliness: 1, bond: 1 },
+    stages: { babyToChild: 16, childToAdult: 48 },
+    description: "Eats less, needs more attention"
+  },
+  sprout: {
+    decay: { hunger: 1, happiness: 1, energy: 1.3, cleanliness: 0.7, bond: 1 },
+    stages: { babyToChild: 36, childToAdult: 120 },
+    description: "Tires quickly, stays clean"
+  },
+  ghost: {
+    decay: { hunger: 0.7, happiness: 1.3, energy: 1, cleanliness: 0.8, bond: 1 },
+    stages: { babyToChild: 24, childToAdult: 72 },
+    description: "Barely eats, emotionally needy"
+  },
+  star: {
+    decay: { hunger: 1, happiness: 1, energy: 1, cleanliness: 1, bond: 1 },
+    stages: { babyToChild: 24, childToAdult: 72 },
+    description: "Perfectly balanced, no weakness"
+  }
+};
+const PERSONALITY_TRAITS = {
+  sweet: {
+    decayMultipliers: { hunger: 1, happiness: 1.1, energy: 1, cleanliness: 1, bond: 0.7 },
+    bondGainMultiplier: 1,
+    description: "Bond decays 30% slower, happiness decays 10% faster"
+  },
+  chaotic: {
+    decayMultipliers: { hunger: 1, happiness: 1, energy: 0.8, cleanliness: 1.4, bond: 1 },
+    bondGainMultiplier: 1,
+    description: "Cleanliness decays 40% faster, energy decays 20% slower"
+  },
+  sleepy: {
+    decayMultipliers: { hunger: 0.85, happiness: 1, energy: 1.3, cleanliness: 1, bond: 1 },
+    bondGainMultiplier: 1,
+    description: "Energy decays 30% faster, hunger decays 15% slower"
+  },
+  curious: {
+    decayMultipliers: { hunger: 1, happiness: 0.8, energy: 1.15, cleanliness: 1, bond: 1 },
+    bondGainMultiplier: 1,
+    description: "Happiness decays 20% slower, energy decays 15% faster"
+  },
+  shy: {
+    decayMultipliers: { hunger: 1, happiness: 1, energy: 1, cleanliness: 0.8, bond: 1.4 },
+    bondGainMultiplier: 1,
+    description: "Bond decays 40% faster, cleanliness decays 20% slower"
+  },
+  sassy: {
+    decayMultipliers: { hunger: 1, happiness: 1.15, energy: 1, cleanliness: 1, bond: 1 },
+    bondGainMultiplier: 1.5,
+    description: "Happiness decays 15% faster, bond gains +50% per interaction"
+  }
+};
+const DECAY_TICK_MS = 6e4;
+const BASE_DECAY = {
+  hunger: 4,
+  happiness: 2.5,
+  energy: 2,
+  cleanliness: 1.5,
+  bond: 0.5
+};
+const HP_DAMAGE_RATE = 5;
+const HP_DAMAGE_CRITICAL = 3;
+const HP_RECOVERY_RATE = 2;
+const STAGE_MULTIPLIERS = {
+  egg: 0,
+  baby: 1.5,
+  child: 1,
+  adult: 0.8
+};
+const MAX_CATCHUP_HOURS = 48;
+let decayInterval = null;
+function startDecayTimer() {
+  stopDecayTimer();
+  applyCatchUpDecay();
+  decayInterval = setInterval(() => {
+    tickDecay();
+  }, DECAY_TICK_MS);
+}
+function stopDecayTimer() {
+  if (decayInterval !== null) {
+    clearInterval(decayInterval);
+    decayInterval = null;
+  }
+}
+function applyCatchUpDecay() {
+  const pet = loadPetState();
+  if (!pet || !pet.isAlive) return;
+  const now = Date.now();
+  const lastUpdate = new Date(pet.updatedAt).getTime();
+  const elapsedMs = now - lastUpdate;
+  const elapsedHours = Math.min(elapsedMs / (1e3 * 60 * 60), MAX_CATCHUP_HOURS);
+  if (elapsedHours < 0.01) return;
+  const updated = applyDecayForHours(pet, elapsedHours);
+  savePetState(updated);
+  broadcastState(updated);
+}
+function tickDecay() {
+  const pet = loadPetState();
+  if (!pet || !pet.isAlive) return;
+  const tickHours = DECAY_TICK_MS / (1e3 * 60 * 60);
+  const updated = applyDecayForHours(pet, tickHours);
+  savePetState(updated);
+  broadcastState(updated);
+  if (!updated.isAlive) {
+    handleDeath(updated);
+  }
+}
+function applyDecayForHours(pet, hours) {
+  let state = { ...pet };
+  const speciesTraits = SPECIES_TRAITS[state.species];
+  const personalityTraits = PERSONALITY_TRAITS[state.personality];
+  const stageMultiplier = STAGE_MULTIPLIERS[state.lifeStage];
+  const effectiveDecay = {
+    hunger: BASE_DECAY.hunger * speciesTraits.decay.hunger * personalityTraits.decayMultipliers.hunger * stageMultiplier,
+    happiness: BASE_DECAY.happiness * speciesTraits.decay.happiness * personalityTraits.decayMultipliers.happiness * stageMultiplier,
+    energy: BASE_DECAY.energy * speciesTraits.decay.energy * personalityTraits.decayMultipliers.energy * stageMultiplier,
+    cleanliness: BASE_DECAY.cleanliness * speciesTraits.decay.cleanliness * personalityTraits.decayMultipliers.cleanliness * stageMultiplier,
+    bond: BASE_DECAY.bond * speciesTraits.decay.bond * personalityTraits.decayMultipliers.bond * stageMultiplier
+  };
+  if (state.hunger < 30) effectiveDecay.happiness *= 2;
+  if (state.cleanliness < 20) effectiveDecay.happiness *= 1.5;
+  if (state.energy < 15) effectiveDecay.hunger *= 1.5;
+  if (state.happiness < 20) effectiveDecay.bond *= 2;
+  state.hunger = clamp(state.hunger - effectiveDecay.hunger * hours);
+  state.happiness = clamp(state.happiness - effectiveDecay.happiness * hours);
+  state.energy = clamp(state.energy - effectiveDecay.energy * hours);
+  state.cleanliness = clamp(state.cleanliness - effectiveDecay.cleanliness * hours);
+  state.bond = clamp(state.bond - effectiveDecay.bond * hours);
+  if (state.hunger <= 0) {
+    state.hp = clamp(state.hp - HP_DAMAGE_RATE * hours);
+  }
+  if (state.happiness <= 0 && state.hunger < 10) {
+    state.hp = clamp(state.hp - HP_DAMAGE_CRITICAL * hours);
+  }
+  if (state.hunger > 30 && state.happiness > 20 && state.hp < 100) {
+    state.hp = clamp(state.hp + HP_RECOVERY_RATE * hours);
+  }
+  if (state.hp <= 0) {
+    state.hp = 0;
+    state.isAlive = false;
+    state.diedAt = (/* @__PURE__ */ new Date()).toISOString();
+    state.mood = "dead";
+    state.lastMessage = "...";
+  } else {
+    state.mood = deriveMoodFromStats(state);
+    state.lastMessage = deriveMessageFromStats(state);
+  }
+  state = checkLifeStageProgression(state);
+  state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  return state;
+}
+function checkLifeStageProgression(pet) {
+  if (!pet.isAlive) return pet;
+  const speciesTraits = SPECIES_TRAITS[pet.species];
+  const ageHours = (Date.now() - new Date(pet.hatchedAt).getTime()) / (1e3 * 60 * 60);
+  const canEvolve = pet.hunger > 20;
+  if (pet.lifeStage === "baby" && ageHours >= speciesTraits.stages.babyToChild && canEvolve) {
+    return { ...pet, lifeStage: "child", lastMessage: "Your pet grew into a child!" };
+  }
+  if (pet.lifeStage === "child" && ageHours >= speciesTraits.stages.babyToChild + speciesTraits.stages.childToAdult && canEvolve) {
+    return { ...pet, lifeStage: "adult", lastMessage: "Your pet is now an adult!" };
+  }
+  return pet;
+}
+function deriveMoodFromStats(pet) {
+  if (!pet.isAlive) return "dead";
+  if (pet.hp < 40) return "sick";
+  if (pet.hunger < 15) return "hungry";
+  if (pet.energy < 15) return "sleepy";
+  if (pet.happiness < 20) return "sad";
+  if (pet.happiness > 70 && pet.hunger > 50 && pet.energy > 50) return "happy";
+  if (pet.happiness > 60 && pet.energy > 60) return "playful";
+  return "neutral";
+}
+function deriveMessageFromStats(pet) {
+  if (pet.hp < 10) return "...";
+  if (pet.hp < 25) return "I'm really struggling...";
+  if (pet.hp < 50) return "Please take care of me...";
+  if (pet.hp < 80) return "I'm not feeling great...";
+  if (pet.hunger < 10) return "I'm starving!";
+  if (pet.hunger < 25) return "I'm so hungry...";
+  if (pet.energy < 10) return "I can barely keep my eyes open...";
+  if (pet.energy < 25) return "I'm exhausted...";
+  if (pet.cleanliness < 15) return "I feel so dirty...";
+  if (pet.happiness < 15) return "I'm so lonely...";
+  if (pet.happiness < 30) return "Play with me?";
+  if (pet.bond > 80 && pet.happiness > 70) return "I love being with you!";
+  if (pet.happiness > 80) return "Life is wonderful!";
+  return "~";
+}
+function clamp(value, min = 0, max = 100) {
+  return Math.min(max, Math.max(min, value));
+}
+function handleDeath(pet) {
+  saveToGraveyard(pet);
+  for (const win of electron.BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("pet:died", pet);
+    }
+  }
+}
+function broadcastState(pet) {
+  for (const win of electron.BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("pet:state-update", pet);
+    }
+  }
 }
 electron.app.disableHardwareAcceleration();
 electron.app.commandLine.appendSwitch("disable-gpu");
@@ -544,6 +818,7 @@ electron.app.commandLine.appendSwitch("disable-features", "HardwareMediaKeyHandl
 electron.app.whenReady().then(() => {
   registerIpcHandlers();
   createMainWindow();
+  startDecayTimer();
   electron.app.on("activate", () => {
     if (electron.BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();

@@ -1,18 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { usePetState } from "./hooks/usePetState";
-import { generateRandomPetVariant } from "./pet/generateRandomPet";
-import { DEFAULT_PET_STATS, PetState } from "./pet/petVariant";
+import { generateRandomPet } from "./pet/generateRandomPet";
+import { DEFAULT_PET_STATS, PetState, SPECIES_DEFAULT_NAMES } from "./pet/petVariant";
 import { EggHatchScreen } from "./components/EggHatchScreen";
-import { NamePetScreen } from "./components/NamePetScreen";
 import { PetDetails } from "./components/PetDetails";
 import { RenamePetModal } from "./components/RenamePetModal";
+import { DeathScreen } from "./components/DeathScreen";
 
 export function App() {
   const {
     state,
     loading,
-    petVariant,
     petState,
     transition,
     setPetVariant,
@@ -25,8 +24,24 @@ export function App() {
   );
 
   const [showRenameModal, setShowRenameModal] = useState(false);
+  const [pendingPet, setPendingPet] = useState<{ variant: ReturnType<typeof generateRandomPet>["variant"]; isShiny: boolean } | null>(null);
 
-  // Show nothing while loading initial state from storage
+  // Listen for real-time state updates from the decay engine
+  useEffect(() => {
+    window.petmiiAPI.onStateUpdate((updatedPet) => {
+      if (updatedPet && petState && updatedPet.id === petState.id) {
+        setPetState(updatedPet);
+      }
+    });
+  }, [petState?.id]);
+
+  // Listen for death events
+  useEffect(() => {
+    window.petmiiAPI.onPetDied(() => {
+      // petState will be updated via onStateUpdate
+    });
+  }, []);
+
   if (loading) {
     return (
       <div className="egg-hatch-screen">
@@ -36,36 +51,46 @@ export function App() {
     );
   }
 
+  // Check if pet is dead — show death screen
+  if (petState && !petState.isAlive) {
+    return (
+      <DeathScreen
+        petState={petState}
+        onStartOver={async () => {
+          window.petmiiAPI.closeOverlay();
+          await reset();
+          transition("EGG_READY");
+        }}
+      />
+    );
+  }
+
   function handleHatch() {
-    const variant = generateRandomPetVariant();
-    setPetVariant(variant);
+    const generated = generateRandomPet();
+    setPetVariant(generated.variant);
+    setPendingPet(generated);
     transition("HATCHING");
   }
 
-  function handleAnimationEnd() {
-    transition("NAMING");
-  }
-
-  async function handleNameSubmit(name: string) {
-    if (!petVariant) return;
+  async function handleAnimationEnd() {
+    if (!pendingPet) return;
 
     const now = new Date().toISOString();
     const newPet: PetState = {
       id: crypto.randomUUID(),
-      name,
-      species: petVariant.species,
-      color: petVariant.color,
-      personality: petVariant.personality,
+      name: SPECIES_DEFAULT_NAMES[pendingPet.variant.species],
+      species: pendingPet.variant.species,
+      color: pendingPet.variant.color,
+      personality: pendingPet.variant.personality,
       ...DEFAULT_PET_STATS,
+      isShiny: pendingPet.isShiny,
       hatchedAt: now,
       createdAt: now,
       updatedAt: now,
     };
 
     try {
-      console.log("[petmii] Saving new pet:", newPet.name);
       await window.petmiiAPI.savePet(newPet);
-      console.log("[petmii] Pet saved successfully");
       setPetState(newPet);
       transition("ACTIVE_PET");
     } catch (err) {
@@ -84,13 +109,15 @@ export function App() {
     transition("EGG_READY");
   }
 
-  function handleRenameClick(_currentName: string) {
-    setShowRenameModal(true);
+  function handleRenameClick() {
+    // Only allow renaming at adult stage
+    if (petState && petState.lifeStage === "adult") {
+      setShowRenameModal(true);
+    }
   }
 
   async function handleRenameConfirm(newName: string) {
     try {
-      console.log("[petmii] Renaming pet to:", newName);
       const updated = await rename(newName);
       if (updated) {
         window.petmiiAPI.updateOverlay({
@@ -115,10 +142,6 @@ export function App() {
           onHatch={handleHatch}
           onAnimationEnd={handleAnimationEnd}
         />
-      );
-    case "NAMING":
-      return (
-        <NamePetScreen variant={petVariant!} onNameSubmit={handleNameSubmit} />
       );
     case "ACTIVE_PET":
       return (

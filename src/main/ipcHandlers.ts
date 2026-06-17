@@ -3,6 +3,7 @@
 
 import { app, ipcMain } from "electron";
 import { loadPetState, savePetState, clearPetState } from "./petStorage";
+import { loadGraveyard, removeFromGraveyard } from "./graveyard";
 import {
   closeOverlayWindow,
   getOverlayWindow,
@@ -92,5 +93,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.on("window:overlay-drag-end", () => {
     endDrag();
+  });
+
+  // Graveyard
+  ipcMain.handle("graveyard:load", () => loadGraveyard());
+  ipcMain.handle("graveyard:remove", (_, id: string) => {
+    removeFromGraveyard(id);
+    return true;
   });
 }

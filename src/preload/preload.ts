@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
   onPhysicsStateUpdate: (callback: (state: unknown) => void) => {
     ipcRenderer.on("pet:physics-state", (_, state) => callback(state));
   },
+  onPetDied: (callback: (pet: unknown) => void) => {
+    ipcRenderer.on("pet:died", (_, pet) => callback(pet));
+  },
+  loadGraveyard: () => ipcRenderer.invoke("graveyard:load"),
+  removeFromGraveyard: (id: string) => ipcRenderer.invoke("graveyard:remove", id),
   overlayDragStart: (screenX: number, screenY: number) =>
     ipcRenderer.send("window:overlay-drag-start", screenX, screenY),
   overlayDragMove: (screenX: number, screenY: number) =>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { PetVariant, SPECIES_DEFAULT_NAMES } from "../pet/petVariant";
 import { PetAvatar } from "./PetAvatar";
 import "../styles/name-pet.css";
@@ -11,6 +11,15 @@ interface NamePetScreenProps {
 export function NamePetScreen({ variant, onNameSubmit }: NamePetScreenProps) {
   const [name, setName] = useState(SPECIES_DEFAULT_NAMES[variant.species]);
   const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Force focus on mount — more reliable than autoFocus on Linux/WSL
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,10 +47,12 @@ export function NamePetScreen({ variant, onNameSubmit }: NamePetScreenProps) {
           species={variant.species}
           color={variant.color}
           personality={variant.personality}
+          static
         />
       </div>
       <form onSubmit={handleSubmit} className="name-pet-input-area">
         <input
+          ref={inputRef}
           type="text"
           value={name}
           onChange={(e) => {

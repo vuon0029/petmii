@@ -26,6 +26,11 @@ electron.contextBridge.exposeInMainWorld("petmiiAPI", {
   onPhysicsStateUpdate: (callback) => {
     electron.ipcRenderer.on("pet:physics-state", (_, state) => callback(state));
   },
+  onPetDied: (callback) => {
+    electron.ipcRenderer.on("pet:died", (_, pet) => callback(pet));
+  },
+  loadGraveyard: () => electron.ipcRenderer.invoke("graveyard:load"),
+  removeFromGraveyard: (id) => electron.ipcRenderer.invoke("graveyard:remove", id),
   overlayDragStart: (screenX, screenY) => electron.ipcRenderer.send("window:overlay-drag-start", screenX, screenY),
   overlayDragMove: (screenX, screenY) => electron.ipcRenderer.send("window:overlay-drag-move", screenX, screenY),
   overlayDragEnd: () => electron.ipcRenderer.send("window:overlay-drag-end"),

@@ -7,12 +7,20 @@
   height: 48px;
   overflow: hidden;
   position: relative;
+  image-rendering: pixelated;
+  background-size: 192px 48px;
+  background-repeat: no-repeat;
+  background-position: 0 0;
+  animation: moveSpritesheet 1.3s steps(4) infinite;
+  /* Prevent this element from affecting input focus */
+  pointer-events: none;
+  contain: strict;
 }
 
-.pet-avatar-spritesheet {
-  animation: moveSpritesheet 1.3s steps(4) infinite;
-  width: 192px; /* 4 frames × 48px */
-  position: absolute;
+/* Static mode — show first frame only */
+.pet-avatar-container.pet-avatar-static {
+  animation: none;
+  background-position: 0 0;
 }
 
 .pixelart {
@@ -21,10 +29,10 @@
 
 @keyframes moveSpritesheet {
   from {
-    transform: translate3d(0px, 0, 0);
+    background-position: 0 0;
   }
   to {
-    transform: translate3d(-100%, 0, 0);
+    background-position: -192px 0;
   }
 }
 

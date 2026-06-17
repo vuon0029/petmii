@@ -15,19 +15,15 @@ function getStoragePath(): string {
 const VALID_SPECIES: PetSpecies[] = ["mochi", "blob", "bun", "sprout", "ghost", "star"];
 const VALID_COLORS: PetColor[] = ["cream", "pink", "blue", "mint", "lavender", "yellow"];
 const VALID_PERSONALITIES: PetPersonality[] = ["sweet", "chaotic", "sleepy", "curious", "shy", "sassy"];
-const VALID_MOODS: PetMood[] = ["happy", "sad", "hungry", "sleepy", "playful", "neutral"];
+const VALID_MOODS: PetMood[] = ["happy", "sad", "hungry", "sleepy", "playful", "neutral", "sick", "dead"];
 const VALID_LIFE_STAGES: PetLifeStage[] = ["egg", "baby", "child", "adult"];
 
-/**
- * Validates that a value is a number within the 0-100 range (inclusive).
- */
 function isStatValue(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 /**
  * Validates that an unknown value is a valid PetState object.
- * Checks all required fields exist and have valid types/values.
  */
 export function validatePetState(data: unknown): data is PetState {
   if (data === null || data === undefined || typeof data !== "object") {
@@ -36,7 +32,7 @@ export function validatePetState(data: unknown): data is PetState {
 
   const obj = data as Record<string, unknown>;
 
-  // String fields that must be non-empty
+  // String fields
   if (typeof obj.id !== "string" || obj.id.length === 0) return false;
   if (typeof obj.name !== "string" || obj.name.length === 0) return false;
   if (typeof obj.hatchedAt !== "string" || obj.hatchedAt.length === 0) return false;
@@ -50,19 +46,23 @@ export function validatePetState(data: unknown): data is PetState {
   if (!VALID_MOODS.includes(obj.mood as PetMood)) return false;
   if (!VALID_LIFE_STAGES.includes(obj.lifeStage as PetLifeStage)) return false;
 
+  // Boolean fields
+  if (typeof obj.isAlive !== "boolean") return false;
+  if (typeof obj.isShiny !== "boolean") return false;
+
   // Numeric stat fields (0-100)
   if (!isStatValue(obj.hunger)) return false;
   if (!isStatValue(obj.happiness)) return false;
   if (!isStatValue(obj.energy)) return false;
   if (!isStatValue(obj.cleanliness)) return false;
   if (!isStatValue(obj.bond)) return false;
+  if (!isStatValue(obj.hp)) return false;
 
   return true;
 }
 
 /**
- * Loads pet state from the JSON storage file.
- * Returns null if the file is missing, corrupted, or contains invalid data.
+ * Loads pet state from disk. Returns null if missing, corrupted, or invalid.
  */
 export function loadPetState(): PetState | null {
   const storagePath = getStoragePath();
@@ -81,15 +81,12 @@ export function loadPetState(): PetState | null {
 
     return parsed;
   } catch {
-    // Corrupted JSON or read error — treat as no pet
     return null;
   }
 }
 
 /**
- * Saves pet state to the JSON storage file using atomic write.
- * Writes to a temp file first, then renames to the target path.
- * Returns true on success, false on failure.
+ * Saves pet state to disk using atomic write (temp → rename).
  */
 export function savePetState(state: PetState): boolean {
   const storagePath = getStoragePath();
@@ -106,7 +103,6 @@ export function savePetState(state: PetState): boolean {
     fs.renameSync(tempPath, storagePath);
     return true;
   } catch {
-    // Clean up temp file if it exists
     try {
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
@@ -119,9 +115,7 @@ export function savePetState(state: PetState): boolean {
 }
 
 /**
- * Deletes the pet state storage file.
- * Returns true on success or if the file doesn't exist.
- * Returns false if deletion fails.
+ * Deletes the pet state file.
  */
 export function clearPetState(): boolean {
   const storagePath = getStoragePath();
@@ -130,7 +124,6 @@ export function clearPetState(): boolean {
     if (!fs.existsSync(storagePath)) {
       return true;
     }
-
     fs.unlinkSync(storagePath);
     return true;
   } catch {

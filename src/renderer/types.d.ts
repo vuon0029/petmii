@@ -11,8 +11,8 @@ export interface ProcessMetric {
     percentCPUUsage: number;
   };
   memory: {
-    workingSetSize: number; // KB
-    peakWorkingSetSize: number; // KB
+    workingSetSize: number;
+    peakWorkingSetSize: number;
   };
 }
 
@@ -24,6 +24,17 @@ export interface SystemMetrics {
     heapTotal: number;
     external: number;
   };
+}
+
+export interface GraveyardEntry {
+  id: string;
+  name: string;
+  species: string;
+  color: string;
+  personality: string;
+  isShiny: boolean;
+  hatchedAt: string;
+  diedAt: string;
 }
 
 declare global {
@@ -44,6 +55,9 @@ declare global {
       onDirectionUpdate(callback: (direction: "left" | "right") => void): void;
       onRotationUpdate(callback: (degrees: number) => void): void;
       onPhysicsStateUpdate(callback: (state: "idle" | "flying" | "landed" | "getting-up") => void): void;
+      onPetDied(callback: (pet: PetState) => void): void;
+      loadGraveyard(): Promise<GraveyardEntry[]>;
+      removeFromGraveyard(id: string): Promise<boolean>;
       overlayDragStart(screenX: number, screenY: number): void;
       overlayDragMove(screenX: number, screenY: number): void;
       overlayDragEnd(): void;
