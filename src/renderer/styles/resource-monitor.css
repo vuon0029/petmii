@@ -1,0 +1,152 @@
+.resource-monitor-toggle {
+  -webkit-app-region: no-drag;
+  background: #e8e8e8;
+  border: none;
+  border-radius: 12px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #666;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.resource-monitor-toggle:hover {
+  background: #d8d8d8;
+}
+
+/* When expanded, the monitor sits below the settings row as a full-width panel */
+.resource-monitor {
+  -webkit-app-region: no-drag;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 10px;
+  padding: 12px;
+  /* Break out of the flex row and span full width */
+  flex-basis: 100%;
+  color: #e0e0e0;
+  font-size: 0.8rem;
+  font-family: "Fira Code", "Cascadia Code", monospace;
+}
+
+.resource-monitor--compact {
+  padding: 6px 10px;
+  margin-top: 8px;
+  border-radius: 6px;
+}
+
+.resource-monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.resource-monitor--compact .resource-monitor-header {
+  margin-bottom: 4px;
+}
+
+.resource-monitor-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.resource-monitor-close {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.resource-monitor-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.resource-monitor-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.resource-monitor--compact .resource-monitor-summary {
+  margin-bottom: 0;
+  gap: 12px;
+  font-size: 0.75rem;
+}
+
+.resource-monitor-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resource-monitor-label {
+  color: #888;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.resource-monitor-value {
+  color: #4fc3f7;
+  font-weight: 600;
+}
+
+.resource-monitor-processes {
+  margin-top: 8px;
+}
+
+.resource-monitor-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.resource-monitor-table th {
+  text-align: left;
+  color: #888;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-bottom: 1px solid #2a2a4a;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.resource-monitor-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.resource-monitor-table tr:last-child td {
+  border-bottom: none;
+}
+
+.resource-monitor-heap {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #2a2a4a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.resource-monitor-loading {
+  color: #888;
+  font-style: italic;
+  text-align: center;
+  padding: 8px;
+}
+
+.resource-monitor--error {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #f88;
+  font-size: 0.75rem;
+  padding: 8px 12px;
+}

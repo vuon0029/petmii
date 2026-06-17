@@ -1,0 +1,80 @@
+/* Global Styles - petmii */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "Silkscreen", monospace;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #333;
+  background-color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Centered container */
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+/* Button base styles */
+button {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background-color: #ffb5c8;
+  color: #333;
+  font-weight: 600;
+  transition: background-color 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
+}
+
+button:hover {
+  background-color: #ff9ab5;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Input base styles */
+input[type="text"] {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 10px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  max-width: 280px;
+}
+
+input[type="text"]:focus {
+  border-color: #ffb5c8;
+}
+
+input[type="text"]::placeholder {
+  color: #aaa;
+}

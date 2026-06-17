@@ -1,0 +1,82 @@
+/* Rename Pet Modal Styles */
+
+.rename-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.rename-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 24px;
+  width: 90%;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  animation: modal-appear 0.2s ease;
+}
+
+.rename-modal h2 {
+  margin: 0 0 16px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #333;
+  text-align: center;
+}
+
+.rename-modal form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.rename-modal input[type="text"] {
+  text-align: center;
+  width: 100%;
+  max-width: 260px;
+}
+
+.rename-modal__error {
+  font-size: 0.85rem;
+  color: #e74c3c;
+  margin: 0;
+  min-height: 1.2em;
+}
+
+.rename-modal__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.rename-modal__cancel {
+  background-color: #eee;
+  color: #555;
+}
+
+.rename-modal__cancel:hover {
+  background-color: #ddd;
+}
+
+.rename-modal__confirm {
+  background-color: #ffb5c8;
+  color: #333;
+}
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

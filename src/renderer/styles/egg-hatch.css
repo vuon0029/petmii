@@ -1,0 +1,63 @@
+/* Egg Hatch Screen Styles */
+
+.egg-hatch-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.egg-hatch-screen h1 {
+  font-family: "Press Start 2P", monospace;
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: #333;
+  margin: 0;
+}
+
+.egg-hatch-screen p {
+  font-size: 0.95rem;
+  color: #777;
+  margin: 0;
+}
+
+/* Egg shape */
+.egg {
+  width: 70px;
+  height: 90px;
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  background: linear-gradient(135deg, #fff8e7, #ffe4b5);
+  border: 3px solid #deb887;
+  position: relative;
+}
+
+/* Hatching animation state */
+.egg.hatching {
+  animation: egg-crack 2s ease-in-out forwards;
+}
+
+@keyframes egg-crack {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  20% {
+    transform: rotate(-3deg) scale(1);
+  }
+  40% {
+    transform: rotate(3deg) scale(1.02);
+  }
+  60% {
+    transform: rotate(-5deg) scale(1.05);
+  }
+  80% {
+    transform: rotate(5deg) scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: rotate(0deg) scale(1.3);
+    opacity: 0;
+  }
+}

@@ -1,0 +1,152 @@
+/* Pet Avatar CSS — Species shapes, colors, personality animations */
+
+/* ===== Sprite-based avatar (matches tutorial approach) ===== */
+
+.pet-avatar-container {
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pet-avatar-spritesheet {
+  animation: moveSpritesheet 1.3s steps(4) infinite;
+  width: 192px; /* 4 frames × 48px */
+  position: absolute;
+}
+
+.pixelart {
+  image-rendering: pixelated;
+}
+
+@keyframes moveSpritesheet {
+  from {
+    transform: translate3d(0px, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+/* ===== CSS Fallback avatar (when no sprite exists) ===== */
+
+/* Base avatar class */
+.pet-avatar {
+  width: 48px;
+  height: 48px;
+  position: relative;
+  image-rendering: pixelated;
+}
+
+/* Species shape classes */
+.pet-species-mochi {
+  border-radius: 50%;
+}
+
+.pet-species-blob {
+  border-radius: 60% 40% 50% 70% / 50% 60% 40% 50%;
+}
+
+.pet-species-bun {
+  border-radius: 50% 50% 40% 40%;
+}
+
+.pet-species-sprout {
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  width: 60px;
+  height: 90px;
+}
+
+.pet-species-ghost {
+  border-radius: 50% 50% 0 0;
+  height: 100px;
+}
+
+.pet-species-star {
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+/* Color classes */
+.pet-color-cream {
+  background-color: #FFF8E7;
+}
+
+.pet-color-pink {
+  background-color: #FFB5C8;
+}
+
+.pet-color-blue {
+  background-color: #A8D8EA;
+}
+
+.pet-color-mint {
+  background-color: #B5EAD7;
+}
+
+.pet-color-lavender {
+  background-color: #C9B1FF;
+}
+
+.pet-color-yellow {
+  background-color: #FFEAA7;
+}
+
+/* Personality animation classes */
+.pet-personality-sweet {
+  animation: gentle-bounce 3s ease-in-out infinite;
+}
+
+.pet-personality-chaotic {
+  animation: shake-wobble 0.5s ease-in-out infinite;
+}
+
+.pet-personality-sleepy {
+  animation: slow-breathe 4s ease-in-out infinite;
+  opacity: 0.85;
+}
+
+.pet-personality-curious {
+  animation: peek-around 3s ease-in-out infinite;
+}
+
+.pet-personality-shy {
+  animation: hide-peek 4s ease-in-out infinite;
+  transform: scale(0.9);
+}
+
+.pet-personality-sassy {
+  animation: sway 2s ease-in-out infinite;
+}
+
+/* Keyframe animations */
+@keyframes gentle-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes shake-wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
+}
+
+@keyframes slow-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes peek-around {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(5px); }
+  70% { transform: translateX(-5px); }
+}
+
+@keyframes hide-peek {
+  0%, 70%, 100% { transform: scale(0.9); opacity: 0.7; }
+  80% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sway {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(5deg); }
+}
