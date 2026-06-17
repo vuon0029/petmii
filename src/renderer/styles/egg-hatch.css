@@ -24,18 +24,20 @@
   margin: 0;
 }
 
-/* Egg shape */
-.egg {
-  width: 70px;
-  height: 90px;
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  background: linear-gradient(135deg, #fff8e7, #ffe4b5);
-  border: 3px solid #deb887;
-  position: relative;
+/* Egg image */
+.egg-img {
+  width: 64px;
+  height: auto;
+  image-rendering: pixelated;
+  transition: transform 0.3s ease;
 }
 
-/* Hatching animation state */
-.egg.hatching {
+.egg-img:hover {
+  transform: scale(1.05);
+}
+
+/* Hatching animation */
+.egg-img.hatching {
   animation: egg-crack 2s ease-in-out forwards;
 }
 

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import eggImage from "../assets/default_egg.png";
 import "../styles/egg-hatch.css";
 
 interface EggHatchScreenProps {
@@ -18,12 +19,14 @@ export function EggHatchScreen({ hatching = false, onHatch, onAnimationEnd }: Eg
     return () => clearTimeout(timer);
   }, [hatching, onAnimationEnd]);
 
-  const eggClassName = hatching ? "egg hatching" : "egg";
-
   return (
     <div className="egg-hatch-screen">
       <h1>petmii</h1>
-      <div className={eggClassName} aria-label="Egg" />
+      <img
+        src={eggImage}
+        alt="Egg"
+        className={`egg-img ${hatching ? "hatching" : ""}`}
+      />
       <button onClick={onHatch} disabled={hatching}>
         Hatch Egg
       </button>

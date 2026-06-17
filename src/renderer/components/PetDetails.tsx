@@ -68,11 +68,8 @@ export function PetDetails({
 
   return (
     <div className="pet-details">
-      {/* Top bar */}
+      {/* Top bar: Overlay + Reset */}
       <div className="pet-details-topbar">
-        <Suspense fallback={null}>
-          <ResourceMonitor />
-        </Suspense>
         <div className="pet-details-topbar-actions">
           <button type="button" onClick={onOverlayMode} className="pet-details-overlay-btn">
             🐾 Overlay
@@ -82,6 +79,11 @@ export function PetDetails({
           </button>
         </div>
       </div>
+
+      {/* Resource monitor row */}
+      <Suspense fallback={null}>
+        <ResourceMonitor />
+      </Suspense>
 
       {/* Pet name with pencil for rename */}
       <div className="pet-details-header">
@@ -117,11 +119,19 @@ export function PetDetails({
           color={petState.color}
           personality={petState.personality}
         />
+        <div className="pet-details-speech-wrapper">
+          {petState.lastMessage && petState.lastMessage !== "~" && (
+            <div className="pet-details-speech">
+              <span>{petState.lastMessage}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <p className="pet-details-mood">{petState.mood}</p>
 
       <div className="pet-details-stats">
+        <StatBar label="HP" value={petState.hp} color="#e53935" />
         <StatBar label="Hunger" value={petState.hunger} color="#ff9800" />
         <StatBar label="Happiness" value={petState.happiness} color="#ffc107" />
         <StatBar label="Energy" value={petState.energy} color="#4caf50" />

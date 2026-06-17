@@ -17,8 +17,8 @@ const DRAG_HISTORY_SIZE = 5;
 const dragHistory: { x: number; y: number; t: number }[] = [];
 
 // Pet overlay dimensions
-const PET_WIDTH = 150;
-const PET_HEIGHT = 80;
+const PET_WIDTH = 220; // wider for speech bubble on the side
+const PET_HEIGHT = 100; // room for nametag above pet
 
 // Walking behavior config
 const WALK_STEP_PX = 70;
@@ -39,8 +39,8 @@ const STAND_UP_DELAY_MS = 1200; // wait before standing up after landing
 
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 600,
+    width: 480,
+    height: 720,
     title: "petmii",
     icon: APP_ICON,
     resizable: true,
@@ -68,11 +68,29 @@ export function createMainWindow(): BrowserWindow {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.focus();
     }
+    // Hide overlay when main window is focused
+    if (overlayVisible) {
+      hideOverlay();
+    }
+  });
+
+  // Show overlay when main window loses focus (user clicked away)
+  mainWindow.on("blur", () => {
+    // Small delay to avoid race conditions with focus/blur events
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      // Don't show if the window has regained focus already
+      if (mainWindow.isFocused()) return;
+      const pet = loadPetState();
+      if (pet && pet.isAlive && !overlayVisible && !mainWindow.isMinimized()) {
+        showOverlay();
+      }
+    }, 300);
   });
 
   mainWindow.on("minimize", () => {
     const pet = loadPetState();
-    if (pet && !overlayVisible) {
+    if (pet && pet.isAlive && !overlayVisible) {
       showOverlay();
     }
   });
@@ -248,8 +266,21 @@ export function showOverlay(): void {
   overlayVisible = true;
   const overlay = createOverlayWindow();
 
-  overlay.show();
+  // Force overlay to front — hide/show + re-assert alwaysOnTop
+  // This fixes the issue where the overlay ends up behind other windows
+  // after returning from main view
+  overlay.hide();
   overlay.setAlwaysOnTop(true, "screen-saver");
+  overlay.showInactive();
+  overlay.setAlwaysOnTop(true, "screen-saver");
+
+  // On Linux/X11, also need to explicitly raise after a short delay
+  setTimeout(() => {
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.setAlwaysOnTop(true, "screen-saver");
+      overlay.moveTop();
+    }
+  }, 200);
 
   // Reset rotation when showing
   sendRotation(0);
