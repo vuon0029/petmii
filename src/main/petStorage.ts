@@ -62,7 +62,8 @@ export function validatePetState(data: unknown): data is PetState {
 }
 
 /**
- * Loads pet state from disk. Returns null if missing, corrupted, or invalid.
+ * Loads pet state from disk. Returns null if missing or corrupted.
+ * Migrates old data by filling in missing fields with defaults.
  */
 export function loadPetState(): PetState | null {
   const storagePath = getStoragePath();
@@ -74,6 +75,16 @@ export function loadPetState(): PetState | null {
 
     const raw = fs.readFileSync(storagePath, "utf-8");
     const parsed = JSON.parse(raw);
+
+    if (parsed === null || typeof parsed !== "object") {
+      return null;
+    }
+
+    // Migrate: fill in missing fields from newer versions
+    if (typeof parsed.isShiny !== "boolean") parsed.isShiny = false;
+    if (typeof parsed.isAlive !== "boolean") parsed.isAlive = true;
+    if (typeof parsed.hp !== "number") parsed.hp = 100;
+    if (typeof parsed.diedAt === "undefined") parsed.diedAt = null;
 
     if (!validatePetState(parsed)) {
       return null;

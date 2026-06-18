@@ -61,7 +61,7 @@ export const DEFAULT_PET_STATS = {
   isAlive: true,
   mood: "happy" as PetMood,
   lifeStage: "baby" as PetLifeStage,
-  lastMessage: "Your new pet hatched!",
+  lastMessage: "Hewwo~!",
   lastFedAt: null,
   lastPlayedAt: null,
   lastCleanedAt: null,

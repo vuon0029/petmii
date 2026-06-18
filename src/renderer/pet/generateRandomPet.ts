@@ -20,7 +20,7 @@ export interface GeneratedPet {
 
 export function generateRandomPetVariant(): PetVariant {
   return {
-    species: 'blob',
+    species: randomFrom(SPECIES),
     color: randomFrom(COLORS),
     personality: randomFrom(PERSONALITIES),
   };

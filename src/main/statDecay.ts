@@ -34,19 +34,14 @@ const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
   adult: 0.8,
 };
 
-// Max offline catch-up (hours)
-const MAX_CATCHUP_HOURS = 48;
-
 let decayInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Starts the decay timer. Should be called once on app ready.
+ * Decay only runs while the app is open — no catch-up for offline time.
  */
 export function startDecayTimer(): void {
   stopDecayTimer();
-
-  // On start, apply catch-up decay for time elapsed since last update
-  applyCatchUpDecay();
 
   decayInterval = setInterval(() => {
     tickDecay();
@@ -58,25 +53,6 @@ export function stopDecayTimer(): void {
     clearInterval(decayInterval);
     decayInterval = null;
   }
-}
-
-/**
- * Applies catch-up decay for the time the app was closed.
- */
-function applyCatchUpDecay(): void {
-  const pet = loadPetState();
-  if (!pet || !pet.isAlive) return;
-
-  const now = Date.now();
-  const lastUpdate = new Date(pet.updatedAt).getTime();
-  const elapsedMs = now - lastUpdate;
-  const elapsedHours = Math.min(elapsedMs / (1000 * 60 * 60), MAX_CATCHUP_HOURS);
-
-  if (elapsedHours < 0.01) return; // less than ~36 seconds, skip
-
-  const updated = applyDecayForHours(pet, elapsedHours);
-  savePetState(updated);
-  broadcastState(updated);
 }
 
 /**

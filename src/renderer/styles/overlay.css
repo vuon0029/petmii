@@ -79,7 +79,7 @@ body {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
   font-family: "Silkscreen", monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   padding: 2px 8px;
   border-radius: 3px;
@@ -108,20 +108,13 @@ body {
 
 /* Debuff notifications — removed for cleaner overlay */
 
-/* Speech bubble — to the right of the pet with arrow pointing left */
-.overlay-avatar-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.overlay-avatar-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
+/* Speech bubble — absolutely positioned to the right, doesn't shift pet */
 .overlay-speech {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-left: 6px;
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.94);
@@ -129,17 +122,20 @@ body {
   padding: 4px 8px;
   font-size: 0.7rem;
   color: #444;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: 100px;
   pointer-events: none;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
 .overlay-speech-arrow {
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 0;
   height: 0;
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-right: 5px solid rgba(255, 255, 255, 0.94);
-  margin-right: 4px;
-  flex-shrink: 0;
 }

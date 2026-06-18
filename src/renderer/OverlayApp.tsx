@@ -25,18 +25,8 @@ export function OverlayApp() {
   const lastMessage = useRef<string>("");
 
   useEffect(() => {
-    async function init() {
-      const saved = await window.petmiiAPI.loadPet();
-      if (saved) {
-        setVariant({
-          species: saved.species,
-          color: saved.color,
-          personality: saved.personality,
-        });
-        setPetState(saved);
-      }
-    }
-    init();
+    // Don't load from disk — rely entirely on IPC pushes from main process
+    // This ensures overlay always shows the same state as main view
 
     window.petmiiAPI.onVariantUpdate((v) => {
       setVariant(v as PetVariant);
@@ -44,17 +34,31 @@ export function OverlayApp() {
 
     window.petmiiAPI.onStateUpdate((s) => {
       const newState = s as PetState;
+      if (!newState || !newState.isAlive) {
+        setPetState(null);
+        setVariant(null);
+        return;
+      }
       setPetState(newState);
+      setVariant({
+        species: newState.species,
+        color: newState.color,
+        personality: newState.personality,
+      });
 
-      // Show speech bubble only when message changes
+      // Show speech bubble only when message changes and is meaningful
       if (newState.lastMessage && newState.lastMessage !== "~" && newState.lastMessage !== lastMessage.current) {
         lastMessage.current = newState.lastMessage;
         setVisibleMessage(newState.lastMessage);
 
-        // Clear previous timer
         if (speechTimer.current) clearTimeout(speechTimer.current);
-
-        // Auto-dismiss after timeout
+        speechTimer.current = setTimeout(() => {
+          setVisibleMessage(null);
+        }, SPEECH_DISPLAY_MS);
+      } else if (newState.lastMessage === "~" && visibleMessage !== null) {
+        // Pet went quiet — dismiss bubble
+        lastMessage.current = "~";
+        if (speechTimer.current) clearTimeout(speechTimer.current);
         speechTimer.current = setTimeout(() => {
           setVisibleMessage(null);
         }, SPEECH_DISPLAY_MS);
@@ -117,9 +121,10 @@ export function OverlayApp() {
   }, []);
 
   if (!variant) return null;
+  if (petState && !petState.isAlive) return null;
 
   const lowStats: { icon: string; cls: string }[] = [];
-  if (petState) {
+  if (petState && petState.isAlive) {
     if (petState.hunger < LOW_STAT_THRESHOLD)
       lowStats.push({ icon: "🍖", cls: "overlay-stat-hunger" });
     if (petState.happiness < LOW_STAT_THRESHOLD)
@@ -157,32 +162,30 @@ export function OverlayApp() {
           </div>
         )}
 
-        <div className="overlay-avatar-row">
-          <div className="overlay-avatar-wrapper">
-            {lowStats.length > 0 && physicsState === "idle" && (
-              <div className="overlay-alerts">
-                {lowStats.map((stat) => (
-                  <span key={stat.cls} className="overlay-alert-icon">
-                    {stat.icon}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div style={{ transform: avatarFlip ? "scaleX(-1)" : undefined }}>
-              <PetAvatar
-                species={variant.species}
-                color={variant.color}
-                personality={variant.personality}
-              />
-            </div>
+        {lowStats.length > 0 && physicsState === "idle" && (
+          <div className="overlay-alerts">
+            {lowStats.map((stat) => (
+              <span key={stat.cls} className="overlay-alert-icon">
+                {stat.icon}
+              </span>
+            ))}
           </div>
-          {visibleMessage && physicsState === "idle" && (
-            <div className="overlay-speech">
-              <div className="overlay-speech-arrow"></div>
-              <span>{visibleMessage}</span>
-            </div>
-          )}
+        )}
+
+        <div style={{ transform: avatarFlip ? "scaleX(-1)" : undefined }}>
+          <PetAvatar
+            species={variant.species}
+            color={variant.color}
+            personality={variant.personality}
+          />
         </div>
+
+        {visibleMessage && physicsState === "idle" && (
+          <div className="overlay-speech">
+            <div className="overlay-speech-arrow"></div>
+            <span>{visibleMessage}</span>
+          </div>
+        )}
       </div>
     </div>
   );

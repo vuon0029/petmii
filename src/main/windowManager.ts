@@ -76,21 +76,22 @@ export function createMainWindow(): BrowserWindow {
 
   // Show overlay when main window loses focus (user clicked away)
   mainWindow.on("blur", () => {
-    // Small delay to avoid race conditions with focus/blur events
     setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
-      // Don't show if the window has regained focus already
       if (mainWindow.isFocused()) return;
+      if (mainWindow.isMinimized()) return;
+      if (overlayVisible) return;
       const pet = loadPetState();
-      if (pet && pet.isAlive && !overlayVisible && !mainWindow.isMinimized()) {
+      if (pet && pet.isAlive) {
         showOverlay();
       }
-    }, 300);
+    }, 200);
   });
 
   mainWindow.on("minimize", () => {
+    if (overlayVisible) return;
     const pet = loadPetState();
-    if (pet && pet.isAlive && !overlayVisible) {
+    if (pet && pet.isAlive) {
       showOverlay();
     }
   });

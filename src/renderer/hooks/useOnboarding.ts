@@ -23,7 +23,7 @@ export function useOnboarding() {
     async function init() {
       try {
         const saved = await window.petmiiAPI.loadPet();
-        if (saved) {
+        if (saved && saved.isAlive) {
           setPetState(saved);
           setPetVariant({
             species: saved.species,
@@ -32,6 +32,10 @@ export function useOnboarding() {
           });
           setState("ACTIVE_PET");
         } else {
+          // No pet, or dead pet — clear any leftover data and start fresh
+          if (saved && !saved.isAlive) {
+            await window.petmiiAPI.clearPet();
+          }
           setState("EGG_READY");
         }
       } catch (err) {

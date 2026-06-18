@@ -17,9 +17,21 @@ import {
 } from "./windowManager";
 
 export function registerIpcHandlers(): void {
-  ipcMain.handle("pet:load", () => loadPetState());
-  ipcMain.handle("pet:save", (_, state) => savePetState(state));
-  ipcMain.handle("pet:clear", () => clearPetState());
+  ipcMain.handle("pet:load", () => {
+    const pet = loadPetState();
+    console.log("[petmii] IPC pet:load →", pet ? `${pet.name} (alive=${pet.isAlive})` : "null");
+    return pet;
+  });
+  ipcMain.handle("pet:save", (_, state) => {
+    const result = savePetState(state);
+    console.log("[petmii] IPC pet:save →", result ? "success" : "FAILED", state?.name);
+    return result;
+  });
+  ipcMain.handle("pet:clear", () => {
+    const result = clearPetState();
+    console.log("[petmii] IPC pet:clear →", result ? "cleared" : "FAILED");
+    return result;
+  });
 
   ipcMain.on("window:close-overlay", () => closeOverlayWindow());
   ipcMain.on("window:show-overlay", () => showOverlay());
