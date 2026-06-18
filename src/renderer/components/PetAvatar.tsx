@@ -1,4 +1,9 @@
-import { PetSpecies, PetColor, PetPersonality } from "../pet/petVariant";
+import {
+  PetSpecies,
+  PetColor,
+  PetPersonality,
+  PetLifeStage,
+} from "../pet/petVariant";
 import { sprites } from "../assets/pet/spriteRegistry";
 import "../styles/pet-avatar.css";
 
@@ -6,18 +11,28 @@ interface PetAvatarProps {
   species: PetSpecies;
   color: PetColor;
   personality: PetPersonality;
-  mood?: string;
   /** If true, show a static first frame instead of animating */
   static?: boolean;
+  lifeStage: PetLifeStage;
 }
 
-function getSpriteSrc(species: string, color: string, mood?: string): string | undefined {
-  const sheet = mood && ["happy", "sad", "sleep"].includes(mood) ? mood : "idle";
-  return sprites[species]?.[color]?.[sheet];
+function getSpriteSrc(
+  species: string,
+  color: string,
+  lifeStage: PetLifeStage,
+): string | undefined {
+  return sprites[species]?.[color]?.[lifeStage];
 }
 
-export function PetAvatar({ species, color, personality, mood, static: isStatic }: PetAvatarProps) {
-  const spriteSrc = getSpriteSrc(species, color, mood);
+export function PetAvatar({
+  species,
+  color,
+  personality,
+  static: isStatic,
+  lifeStage,
+}: PetAvatarProps) {
+  const spriteSrc = getSpriteSrc(species, color, lifeStage);
+  console.log("sprite src: ", spriteSrc, "life stage: ", lifeStage);
 
   const fallbackClass = `pet-avatar pet-species-${species} pet-color-${color} pet-personality-${personality}`;
 

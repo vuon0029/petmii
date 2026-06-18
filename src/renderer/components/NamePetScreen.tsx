@@ -47,6 +47,7 @@ export function NamePetScreen({ variant, onNameSubmit }: NamePetScreenProps) {
           species={variant.species}
           color={variant.color}
           personality={variant.personality}
+          lifeStage={variant.lifeStage}
           static
         />
       </div>

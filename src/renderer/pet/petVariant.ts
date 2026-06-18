@@ -1,17 +1,32 @@
 // src/renderer/pet/petVariant.ts
 // Type definitions and constants for pet variants, state, and defaults.
 
-export type PetSpecies = "mochi" | "blob" | "bun" | "sprout" | "ghost" | "star";
-export type PetColor = "cream" | "pink" | "blue" | "mint" | "lavender" | "yellow";
-export type PetPersonality = "sweet" | "chaotic" | "sleepy" | "curious" | "shy" | "sassy";
+export type PetSpecies = "blob" | "star" | "mochi";
+export type PetColor = "yellow" | "blue" | "pink" | "shiny";
+export type PetPersonality =
+  | "sweet"
+  | "chaotic"
+  | "sleepy"
+  | "curious"
+  | "shy"
+  | "sassy";
 
 export type PetVariant = {
   species: PetSpecies;
   color: PetColor;
   personality: PetPersonality;
+  lifeStage: PetLifeStage;
 };
 
-export type PetMood = "happy" | "sad" | "hungry" | "sleepy" | "playful" | "neutral" | "sick" | "dead";
+export type PetMood =
+  | "happy"
+  | "sad"
+  | "hungry"
+  | "sleepy"
+  | "playful"
+  | "neutral"
+  | "sick"
+  | "dead";
 export type PetLifeStage = "egg" | "baby" | "child" | "adult";
 export type VisualTier = "baby" | "child" | "adult" | "elder" | "legendary";
 
@@ -29,7 +44,7 @@ export interface PetState {
   energy: number;
   cleanliness: number;
   bond: number;
-  hp: number; // hidden from UI, 0-100
+  hp: number;
 
   // State
   isAlive: boolean;
@@ -51,10 +66,10 @@ export interface PetState {
 }
 
 export const DEFAULT_PET_STATS = {
-  hunger: 75,
-  happiness: 70,
+  hunger: 50,
+  happiness: 50,
   energy: 80,
-  cleanliness: 85,
+  cleanliness: 80,
   bond: 10,
   hp: 100,
   isShiny: false,
@@ -70,10 +85,7 @@ export const DEFAULT_PET_STATS = {
 } as const;
 
 export const SPECIES_DEFAULT_NAMES: Record<PetSpecies, string> = {
-  mochi: "Mochi",
-  blob: "Bobo",
-  bun: "Bun",
-  sprout: "Sprout",
-  ghost: "Boo",
-  star: "Star",
+  blob: "Bob",
+  star: "Striker",
+  mochi: "Dumdum",
 };

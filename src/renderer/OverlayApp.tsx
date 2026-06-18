@@ -5,22 +5,25 @@ import type { GameState } from "./types";
 import "./styles/overlay.css";
 import "./styles/pet-avatar.css";
 
-const LOW_STAT_THRESHOLD = 25;
+const LOW_STAT_THRESHOLD = 50;
 const SPEECH_DISPLAY_MS = 8000;
 
 // Physics constants
-const GRAVITY = 0.2;
-const HOP_INTERVAL_MS = 4200; // TESTING: reduced 30% from 3000 (normal: 3000)
-const HOP_STEP_PX = 50;
-const HOP_HEIGHT_PX = 25;
-const HOP_DURATION_MS = 600;
-const PAUSE_CHANCE = 0.4;
+const GRAVITY = 0.04;
+const HOP_INTERVAL_MS = 3000;
+const HOP_STEP_PX = 100;
+const HOP_HEIGHT_PX = 30;
+const HOP_DURATION_MS = 500;
+const PAUSE_CHANCE = 0.6;
 const BOUNCE_DAMPING = 0.2;
 const WALL_BOUNCE_DAMPING = 0.2;
-const DRAG_THRESHOLD_MS = 200;
+const DRAG_THRESHOLD_MS = 300;
 const DRAG_HISTORY_SIZE = 5;
-const ANGULAR_VEL_FACTOR = 0.02;
-const ANGULAR_DAMPING = 0.92;
+const ANGULAR_VEL_FACTOR = 0.03;
+const ANGULAR_DAMPING = 0.95;
+const WALL_PADDING = 4;
+
+const PET_WIDTH = 48;
 
 interface PetOverlayState {
   id: string;
@@ -43,12 +46,18 @@ interface PetOverlayState {
   isHovered: boolean;
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
 export function OverlayApp() {
   const [pets, setPets] = useState<PetOverlayState[]>([]);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
-  const hopTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const hopTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(
+    new Map(),
+  );
   const dragState = useRef<{
     petId: string | null;
     startTime: number;
@@ -61,28 +70,43 @@ export function OverlayApp() {
     window.petmiiAPI.onGameStateUpdate((game) => {
       const g = game as GameState;
       const overlayIds = g.settings.overlayPets;
-      const livingPets = g.pets.filter(p => p.isAlive);
-      const visiblePets = overlayIds.length > 0
-        ? livingPets.filter(p => overlayIds.includes(p.id))
-        : livingPets;
+      const livingPets = g.pets.filter((p) => p.isAlive);
+      const visiblePets =
+        overlayIds.length > 0
+          ? livingPets.filter((p) => overlayIds.includes(p.id))
+          : livingPets;
 
-      setPets(prev => {
+      setPets((prev) => {
         // Merge: keep existing positions for pets that are still alive
         const merged: PetOverlayState[] = [];
         for (const pet of visiblePets) {
-          const existing = prev.find(p => p.id === pet.id);
+          const existing = prev.find((p) => p.id === pet.id);
           if (existing) {
             // Update pet data but keep position/physics
             merged.push({ ...existing, pet });
 
             // Check for message changes
-            if (pet.lastMessage && pet.lastMessage !== "~" && pet.lastMessage !== existing.pet.lastMessage) {
+            if (
+              pet.lastMessage &&
+              pet.lastMessage !== "~" &&
+              pet.lastMessage !== existing.pet.lastMessage
+            ) {
               const idx = merged.length - 1;
               if (existing.messageTimer) clearTimeout(existing.messageTimer);
               const timer = setTimeout(() => {
-                setPets(p => p.map(pp => pp.id === pet.id ? { ...pp, message: null, messageTimer: null } : pp));
+                setPets((p) =>
+                  p.map((pp) =>
+                    pp.id === pet.id
+                      ? { ...pp, message: null, messageTimer: null }
+                      : pp,
+                  ),
+                );
               }, SPEECH_DISPLAY_MS);
-              merged[idx] = { ...merged[idx], message: pet.lastMessage, messageTimer: timer };
+              merged[idx] = {
+                ...merged[idx],
+                message: pet.lastMessage,
+                messageTimer: timer,
+              };
             }
           } else {
             // New pet — random position
@@ -99,10 +123,13 @@ export function OverlayApp() {
       const overlayIds = game.settings.overlayPets;
       const livingPets = game.pets.filter((p: PetState) => p.isAlive);
       // If no overlay pets configured, show all living pets
-      const visiblePets = overlayIds.length > 0
-        ? livingPets.filter(p => overlayIds.includes(p.id))
-        : livingPets;
-      setPets(visiblePets.map((p: PetState) => createPetState(p, window.innerWidth)));
+      const visiblePets =
+        overlayIds.length > 0
+          ? livingPets.filter((p) => overlayIds.includes(p.id))
+          : livingPets;
+      setPets(
+        visiblePets.map((p: PetState) => createPetState(p, window.innerWidth)),
+      );
     }
     init();
 
@@ -113,9 +140,9 @@ export function OverlayApp() {
     // Listen for egg found events
     window.petmiiAPI.onEggFound((data) => {
       const { finder } = data as { finder: PetState; egg: unknown };
-      setPets(prev => prev.map(p =>
-        p.id === finder.id ? { ...p, hasFoundEgg: true } : p
-      ));
+      setPets((prev) =>
+        prev.map((p) => (p.id === finder.id ? { ...p, hasFoundEgg: true } : p)),
+      );
     });
 
     return () => window.removeEventListener("resize", handleResize);
@@ -131,9 +158,12 @@ export function OverlayApp() {
 
     for (const pet of pets) {
       if (!hopTimersRef.current.has(pet.id)) {
-        const timer = setInterval(() => {
-          triggerHop(pet.id);
-        }, HOP_INTERVAL_MS + Math.random() * 1000);
+        const timer = setInterval(
+          () => {
+            triggerHop(pet.id);
+          },
+          HOP_INTERVAL_MS + Math.random() * 1000,
+        );
         hopTimersRef.current.set(pet.id, timer);
       }
     }
@@ -143,14 +173,14 @@ export function OverlayApp() {
         clearInterval(timer);
       }
     };
-  }, [pets.map(p => p.id).join(",")]);
+  }, [pets.map((p) => p.id).join(",")]);
 
   // Physics animation loop (for flying/gravity)
   useEffect(() => {
     function frame() {
-      setPets(prev => {
+      setPets((prev) => {
         let changed = false;
-        const next = prev.map(p => {
+        const next = prev.map((p) => {
           if (!p.isFlying) return p;
           changed = true;
 
@@ -162,21 +192,40 @@ export function OverlayApp() {
           angularVel *= ANGULAR_DAMPING;
 
           // Wall bounce
-          if (x <= 0) { x = 0; vx = -vx * WALL_BOUNCE_DAMPING; angularVel *= -0.5; }
-          if (x >= containerWidth - 48) { x = containerWidth - 48; vx = -vx * WALL_BOUNCE_DAMPING; angularVel *= -0.5; }
+          if (x <= 0) {
+            x = 0;
+            vx = -vx * WALL_BOUNCE_DAMPING;
+            angularVel *= -0.5;
+          }
+          if (x >= containerWidth - PET_WIDTH) {
+            x = containerWidth - PET_WIDTH;
+            vx = -vx * WALL_BOUNCE_DAMPING;
+            angularVel *= -0.5;
+          }
 
           // Ceiling bounce
-          if (y <= 0) { y = 0; vy = -vy * BOUNCE_DAMPING; }
+          if (y <= 0) {
+            y = 0;
+            vy = -vy * BOUNCE_DAMPING;
+          }
 
           // Ground (y >= 0 means at bottom of container - pet height - padding)
-          const groundY = (containerRef.current?.clientHeight || 100) - 48 - 20;
+          const groundY =
+            (containerRef.current?.clientHeight || 100) - PET_WIDTH;
           if (y >= groundY) {
             y = groundY;
             if (Math.abs(vy) < 2 && Math.abs(vx) < 1) {
               // Settled
               return {
-                ...p, x, y: groundY, vx: 0, vy: 0, rotation, angularVel: 0,
-                isFlying: false, isLanded: true,
+                ...p,
+                x,
+                y: groundY,
+                vx: 0,
+                vy: 0,
+                rotation,
+                angularVel: 0,
+                isFlying: false,
+                isLanded: true,
               };
             }
             vy = -vy * BOUNCE_DAMPING;
@@ -202,63 +251,127 @@ export function OverlayApp() {
 
   // Handle landed pets getting back up
   useEffect(() => {
-    const landedPets = pets.filter(p => p.isLanded);
+    const landedPets = pets.filter((p) => p.isLanded);
     for (const p of landedPets) {
       setTimeout(() => {
-        setPets(prev => prev.map(pp =>
-          pp.id === p.id && pp.isLanded ? { ...pp, isLanded: false, isGettingUp: true } : pp
-        ));
+        setPets((prev) =>
+          prev.map((pp) =>
+            pp.id === p.id && pp.isLanded
+              ? { ...pp, isLanded: false, isGettingUp: true }
+              : pp,
+          ),
+        );
         setTimeout(() => {
-          setPets(prev => prev.map(pp =>
-            pp.id === p.id && pp.isGettingUp ? { ...pp, isGettingUp: false, rotation: 0 } : pp
-          ));
+          setPets((prev) =>
+            prev.map((pp) =>
+              pp.id === p.id && pp.isGettingUp
+                ? { ...pp, isGettingUp: false, rotation: 0 }
+                : pp,
+            ),
+          );
         }, 800);
       }, 1200);
     }
-  }, [pets.filter(p => p.isLanded).length]);
+  }, [pets.filter((p) => p.isLanded).length]);
 
   function triggerHop(petId: string) {
-    setPets(prev => prev.map(p => {
-      if (p.id !== petId) return p;
-      // Don't hop if pet is busy with anything
-      if (p.isHopping || p.isDragging || p.isFlying || p.isLanded || p.isGettingUp) return p;
-      if (Math.random() < PAUSE_CHANCE) return p;
+    setPets((prev) =>
+      prev.map((p) => {
+        if (p.id !== petId) return p;
 
-      const dir = Math.random() < 0.15 ? -p.direction as 1 | -1 : p.direction;
-      const groundY = (containerRef.current?.clientHeight || 120) - 48 - 20;
-      const targetX = Math.max(0, Math.min(containerWidth - 48, p.x + HOP_STEP_PX * dir));
+        if (
+          p.isHopping ||
+          p.isDragging ||
+          p.isFlying ||
+          p.isLanded ||
+          p.isGettingUp
+        ) {
+          return p;
+        }
 
-      animateHop(petId, p.x, targetX, groundY);
+        if (Math.random() < PAUSE_CHANCE) return p;
 
-      return { ...p, direction: dir, isHopping: true };
-    }));
+        const containerHeight = containerRef.current?.clientHeight || 120;
+        const maxX = Math.max(0, containerWidth - PET_WIDTH);
+        const minX = 0;
+
+        const groundY = containerHeight - PET_WIDTH;
+
+        const currentX = clamp(p.x, minX, maxX);
+
+        const atLeftWall = currentX <= minX + WALL_PADDING;
+        const atRightWall = currentX >= maxX - WALL_PADDING;
+
+        let dir = p.direction as 1 | -1;
+
+        // Force pet to turn away from the wall
+        if (atLeftWall) {
+          dir = 1;
+        } else if (atRightWall) {
+          dir = -1;
+        } else if (Math.random() < 0.15) {
+          dir = -dir as 1 | -1;
+        }
+
+        let targetX = currentX + HOP_STEP_PX * dir;
+
+        // If the next hop would hit a wall, flip direction and hop away instead
+        if (targetX <= minX || targetX >= maxX) {
+          dir = targetX <= minX ? 1 : -1;
+          targetX = currentX + HOP_STEP_PX * dir;
+        }
+
+        targetX = clamp(targetX, minX, maxX);
+
+        console.log("hop direction:", dir, "from:", currentX, "to:", targetX);
+
+        animateHop(petId, currentX, targetX, groundY);
+
+        return {
+          ...p,
+          x: currentX,
+          direction: dir,
+          isHopping: true,
+        };
+      }),
+    );
   }
 
-  function animateHop(petId: string, startX: number, targetX: number, groundY: number) {
+  function animateHop(
+    petId: string,
+    startX: number,
+    targetX: number,
+    groundY: number,
+  ) {
     const startTime = Date.now();
 
     function frame() {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / HOP_DURATION_MS, 1);
 
-      const easedProgress = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      const easedProgress =
+        progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
       const arcHeight = Math.sin(progress * Math.PI) * HOP_HEIGHT_PX;
       const x = startX + (targetX - startX) * easedProgress;
       const y = groundY - arcHeight;
 
-      setPets(prev => prev.map(p =>
-        p.id === petId && p.isHopping ? { ...p, x, y } : p
-      ));
+      setPets((prev) =>
+        prev.map((p) => (p.id === petId && p.isHopping ? { ...p, x, y } : p)),
+      );
 
       if (progress < 1) {
         requestAnimationFrame(frame);
       } else {
-        setPets(prev => prev.map(p =>
-          p.id === petId ? { ...p, x: targetX, y: groundY, isHopping: false } : p
-        ));
+        setPets((prev) =>
+          prev.map((p) =>
+            p.id === petId
+              ? { ...p, x: targetX, y: groundY, isHopping: false }
+              : p,
+          ),
+        );
       }
     }
 
@@ -268,22 +381,27 @@ export function OverlayApp() {
   // ===== Drag handling =====
 
   // "!" stays until user dismisses by clicking it (exits to main to see eggs)
-  const handleMouseDown = useCallback((petId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    // If pet has egg notification, clicking it goes to main view (to see eggs)
-    const pet = pets.find(p => p.id === petId);
-    if (pet?.hasFoundEgg) {
-      setPets(prev => prev.map(p => p.id === petId ? { ...p, hasFoundEgg: false } : p));
-      window.petmiiAPI.exitOverlayMode();
-      return;
-    }
-    dragState.current = {
-      petId,
-      startTime: Date.now(),
-      started: false,
-      history: [{ x: e.clientX, y: e.clientY, t: Date.now() }],
-    };
-  }, [pets]);
+  const handleMouseDown = useCallback(
+    (petId: string, e: React.MouseEvent) => {
+      e.preventDefault();
+      // If pet has egg notification, clicking it goes to main view (to see eggs)
+      const pet = pets.find((p) => p.id === petId);
+      if (pet?.hasFoundEgg) {
+        setPets((prev) =>
+          prev.map((p) => (p.id === petId ? { ...p, hasFoundEgg: false } : p)),
+        );
+        window.petmiiAPI.exitOverlayMode();
+        return;
+      }
+      dragState.current = {
+        petId,
+        startTime: Date.now(),
+        started: false,
+        history: [{ x: e.clientX, y: e.clientY, t: Date.now() }],
+      };
+    },
+    [pets],
+  );
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const ds = dragState.current;
@@ -293,9 +411,13 @@ export function OverlayApp() {
     if (elapsed >= DRAG_THRESHOLD_MS) {
       if (!ds.started) {
         ds.started = true;
-        setPets(prev => prev.map(p =>
-          p.id === ds.petId ? { ...p, isDragging: true, isHopping: false } : p
-        ));
+        setPets((prev) =>
+          prev.map((p) =>
+            p.id === ds.petId
+              ? { ...p, isDragging: true, isHopping: false }
+              : p,
+          ),
+        );
       }
 
       // Move pet to cursor
@@ -303,9 +425,9 @@ export function OverlayApp() {
       if (rect) {
         const x = e.clientX - rect.left - 24;
         const y = e.clientY - rect.top - 24;
-        setPets(prev => prev.map(p =>
-          p.id === ds.petId ? { ...p, x, y } : p
-        ));
+        setPets((prev) =>
+          prev.map((p) => (p.id === ds.petId ? { ...p, x, y } : p)),
+        );
       }
 
       ds.history.push({ x: e.clientX, y: e.clientY, t: Date.now() });
@@ -320,7 +442,8 @@ export function OverlayApp() {
     if (ds.started) {
       // Calculate throw velocity
       const history = ds.history;
-      let vx = 0, vy = 0;
+      let vx = 0,
+        vy = 0;
       if (history.length >= 2) {
         const recent = history[history.length - 1];
         const older = history[0];
@@ -337,21 +460,31 @@ export function OverlayApp() {
       vy = Math.max(-15, Math.min(15, vy));
       const angularVel = isThrown ? vx * ANGULAR_VEL_FACTOR : 0;
 
-      setPets(prev => prev.map(p =>
-        p.id === ds.petId ? {
-          ...p,
-          isDragging: false,
-          isFlying: true,
-          vx, vy,
-          angularVel,
-        } : p
-      ));
+      setPets((prev) =>
+        prev.map((p) =>
+          p.id === ds.petId
+            ? {
+                ...p,
+                isDragging: false,
+                isFlying: true,
+                vx,
+                vy,
+                angularVel,
+              }
+            : p,
+        ),
+      );
     } else {
       // Short click — exit overlay
       window.petmiiAPI.exitOverlayMode();
     }
 
-    dragState.current = { petId: null, startTime: 0, started: false, history: [] };
+    dragState.current = {
+      petId: null,
+      startTime: 0,
+      started: false,
+      history: [],
+    };
   }, []);
 
   return (
@@ -362,7 +495,7 @@ export function OverlayApp() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {pets.map(p => (
+      {pets.map((p) => (
         <div
           key={p.id}
           className={`overlay-pet ${p.isDragging ? "dragging" : ""} ${p.isFlying ? "physics-flying" : ""} ${p.isLanded ? "physics-landed" : ""} ${p.isGettingUp ? "physics-getting-up" : ""}`}
@@ -371,12 +504,24 @@ export function OverlayApp() {
             left: `${p.x}px`,
             top: `${p.y}px`,
             transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
-            transition: p.isGettingUp ? "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)" : undefined,
+            transition: p.isGettingUp
+              ? "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)"
+              : undefined,
           }}
           onMouseDown={(e) => handleMouseDown(p.id, e)}
-          onMouseEnter={() => setPets(prev => prev.map(pp => pp.id === p.id ? { ...pp, isHovered: true } : pp))}
+          onMouseEnter={() =>
+            setPets((prev) =>
+              prev.map((pp) =>
+                pp.id === p.id ? { ...pp, isHovered: true } : pp,
+              ),
+            )
+          }
           onMouseLeave={() => {
-            setPets(prev => prev.map(pp => pp.id === p.id ? { ...pp, isHovered: false } : pp));
+            setPets((prev) =>
+              prev.map((pp) =>
+                pp.id === p.id ? { ...pp, isHovered: false } : pp,
+              ),
+            );
           }}
         >
           {/* Nametag */}
@@ -385,21 +530,31 @@ export function OverlayApp() {
           </div>
 
           {/* Egg found notification */}
-          {p.hasFoundEgg && (
+          {!p.isFlying && !p.isLanded && p.hasFoundEgg && (
             <div className="overlay-egg-found">!</div>
           )}
 
           {/* Low stat alerts */}
-          {!p.isFlying && !p.isLanded && (
-            <LowStatAlerts pet={p.pet} />
-          )}
+          {
+            <LowStatAlerts
+              pet={p.pet}
+              isFlying={p.isFlying}
+              isLanded={p.isLanded}
+            />
+          }
 
           {/* Pet sprite */}
-          <div style={{ transform: p.direction === -1 && !p.isFlying ? "scaleX(-1)" : undefined }}>
+          <div
+            style={{
+              transform:
+                p.direction === -1 && !p.isFlying ? "scaleX(-1)" : undefined,
+            }}
+          >
             <PetAvatar
               species={p.pet.species}
               color={p.pet.color}
               personality={p.pet.personality}
+              lifeStage={p.pet.lifeStage}
             />
           </div>
 
@@ -416,7 +571,18 @@ export function OverlayApp() {
   );
 }
 
-function LowStatAlerts({ pet }: { pet: PetState }) {
+function LowStatAlerts({
+  pet,
+  isFlying,
+  isLanded,
+}: {
+  pet: PetState;
+  isFlying: boolean;
+  isLanded: boolean;
+}) {
+  if (isFlying || isLanded) {
+    return;
+  }
   const alerts: string[] = [];
   if (pet.hunger < LOW_STAT_THRESHOLD) alerts.push("🍖");
   if (pet.happiness < LOW_STAT_THRESHOLD) alerts.push("💛");
@@ -426,18 +592,20 @@ function LowStatAlerts({ pet }: { pet: PetState }) {
   return (
     <div className="overlay-alerts">
       {alerts.map((icon, i) => (
-        <span key={i} className="overlay-alert-icon">{icon}</span>
+        <span key={i} className="overlay-alert-icon">
+          {icon}
+        </span>
       ))}
     </div>
   );
 }
 
 function createPetState(pet: PetState, screenWidth: number): PetOverlayState {
-  const groundY = window.innerHeight - 48 - 20; // 20px above bottom edge
+  const groundY = window.innerHeight - PET_WIDTH;
   return {
     id: pet.id,
     pet,
-    x: Math.random() * (screenWidth - 48),
+    x: Math.random() * (screenWidth - PET_WIDTH),
     y: groundY,
     vx: 0,
     vy: 0,

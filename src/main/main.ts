@@ -1,7 +1,11 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage } from "electron";
 import path from "path";
 import { registerIpcHandlers } from "./ipcHandlers";
-import { createMainWindow, getMainWindow } from "./windowManager";
+import {
+  closeOverlayWindow,
+  createMainWindow,
+  getMainWindow,
+} from "./windowManager";
 import { startDecayTimer } from "./statDecay";
 
 // WSL2/Linux: Must disable hardware acceleration before app is ready
@@ -12,9 +16,40 @@ app.commandLine.appendSwitch("disable-gpu-compositing");
 app.commandLine.appendSwitch("disable-gpu-sandbox");
 app.commandLine.appendSwitch("disable-software-rasterizer");
 app.commandLine.appendSwitch("no-sandbox");
-app.commandLine.appendSwitch("disable-features", "HardwareMediaKeyHandling,MediaSessionService");
+app.commandLine.appendSwitch(
+  "disable-features",
+  "HardwareMediaKeyHandling,MediaSessionService",
+);
 
 let tray: Tray | null = null;
+let isQuitting = false;
+
+function cleanupTray(): void {
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+}
+
+function quitApp(): void {
+  console.log("[petmii] Quitting app...");
+
+  isQuitting = true;
+  (app as { isQuitting?: boolean }).isQuitting = true;
+
+  // Important: kill overlay first because it is frameless/skipTaskbar/closable:false
+  closeOverlayWindow();
+
+  const main = getMainWindow();
+  if (main && !main.isDestroyed()) {
+    main.destroy();
+  }
+
+  cleanupTray();
+
+  // Force full process exit after manual cleanup
+  app.exit(0);
+}
 
 function createTray(): void {
   const iconPath = path.join(__dirname, "../../build/icon.ico");
@@ -25,20 +60,22 @@ function createTray(): void {
     {
       label: "Show petmii",
       click: () => {
+        if (isQuitting) return;
+
         const main = getMainWindow();
-        if (main) {
-          main.show();
-          main.focus();
+
+        if (!main || main.isDestroyed()) {
+          return;
         }
+
+        main.show();
+        main.focus();
       },
     },
     { type: "separator" },
     {
       label: "Quit",
-      click: () => {
-        (app as { isQuitting?: boolean }).isQuitting = true;
-        app.quit();
-      },
+      click: quitApp,
     },
   ]);
 
@@ -47,14 +84,19 @@ function createTray(): void {
 
   // Click tray icon to show/hide main window
   tray.on("click", () => {
+    if (isQuitting) return;
+
     const main = getMainWindow();
-    if (main) {
-      if (main.isVisible()) {
-        main.hide();
-      } else {
-        main.show();
-        main.focus();
-      }
+
+    if (!main || main.isDestroyed()) {
+      return;
+    }
+
+    if (main.isVisible()) {
+      main.hide();
+    } else {
+      main.show();
+      main.focus();
     }
   });
 }
@@ -72,7 +114,17 @@ app.whenReady().then(() => {
   });
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+  (app as { isQuitting?: boolean }).isQuitting = true;
+
+  closeOverlayWindow();
+  cleanupTray();
+});
+
 // Don't quit when all windows are closed — keep running in tray
 app.on("window-all-closed", () => {
-  // Do nothing — app stays in system tray
+  if (isQuitting) {
+    app.exit(0);
+  }
 });

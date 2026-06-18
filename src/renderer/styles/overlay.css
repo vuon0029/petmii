@@ -13,6 +13,7 @@ body {
   width: 100vw;
   height: 100vh;
   position: relative;
+
   /* Pass clicks through to apps behind */
   pointer-events: none;
 }
@@ -22,15 +23,16 @@ body {
   cursor: pointer;
   pointer-events: auto;
   position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+
+  width: 48px;
+  height: 48px;
+
   overflow: visible;
   transform-origin: center center;
 }
 
 .overlay-pet:hover {
-  filter: brightness(1.1);
+  filter: brightness(1.2);
 }
 
 .overlay-pet.dragging {
@@ -53,11 +55,17 @@ body {
 
 /* Nametag — controlled by JS hover state */
 .overlay-nametag {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+
   display: flex;
   justify-content: center;
   pointer-events: none;
   opacity: 0;
-  margin-bottom: 2px;
+  margin-bottom: 0;
+
+  transform: translateX(-50%);
 }
 
 .overlay-nametag.visible {
@@ -68,7 +76,7 @@ body {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
   font-family: "Silkscreen", monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 400;
   padding: 2px 8px;
   border-radius: 3px;
@@ -79,27 +87,39 @@ body {
 
 /* Low stat alert icons */
 .overlay-alerts {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100%);
+
   display: flex;
   gap: 2px;
   justify-content: center;
   pointer-events: none;
+
+  transform: translateX(-50%);
   animation: alert-bounce 1s ease-in-out infinite;
 }
 
 .overlay-alert-icon {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
 }
 
 @keyframes alert-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  50% {
+    transform: translateX(-50%) translateY(3px);
+  }
 }
 
 /* Speech bubble — to the right */
 .overlay-speech {
   position: absolute;
   left: 100%;
-  top: 50%;
+  top: 30%;
   transform: translateY(-50%);
   margin-left: 6px;
   display: flex;
@@ -118,7 +138,7 @@ body {
 .overlay-speech-arrow {
   position: absolute;
   left: -5px;
-  top: 50%;
+  top: 30%;
   transform: translateY(-50%);
   width: 0;
   height: 0;
@@ -148,6 +168,11 @@ body {
 }
 
 @keyframes egg-found-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
 }

@@ -71,7 +71,7 @@ export function ResourceMonitor({ compact = false }: ResourceMonitorProps) {
         onClick={() => setVisible(true)}
         title="Show resource usage"
       >
-        📊 Stats
+        📊 View resource usage
       </button>
     );
   }

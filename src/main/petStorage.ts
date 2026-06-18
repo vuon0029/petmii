@@ -4,7 +4,14 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs";
-import type { PetState, PetSpecies, PetColor, PetPersonality, PetMood, PetLifeStage } from "../renderer/pet/petVariant";
+import type {
+  PetState,
+  PetSpecies,
+  PetColor,
+  PetPersonality,
+  PetMood,
+  PetLifeStage,
+} from "../renderer/pet/petVariant";
 
 // ===== Types =====
 
@@ -45,20 +52,33 @@ const MAX_PETS = 6;
 const MAX_EGGS = 3;
 const MAX_OVERLAY_PETS = 4;
 
-// TESTING: 30 seconds each (normal: mochi:4, blob:6, bun:3, sprout:8, ghost:10, star:12)
+// (normal: blob:6, star:12, mochi:4)
 export const EGG_HATCH_HOURS: Record<PetSpecies, number> = {
-  mochi: 30 / 3600,
-  blob: 30 / 3600,
-  bun: 30 / 3600,
-  sprout: 30 / 3600,
-  ghost: 30 / 3600,
-  star: 30 / 3600,
+  blob: 0.5,
+  star: 1,
+  mochi: 0.7,
 };
 
-const VALID_SPECIES: PetSpecies[] = ["mochi", "blob", "bun", "sprout", "ghost", "star"];
-const VALID_COLORS: PetColor[] = ["cream", "pink", "blue", "mint", "lavender", "yellow"];
-const VALID_PERSONALITIES: PetPersonality[] = ["sweet", "chaotic", "sleepy", "curious", "shy", "sassy"];
-const VALID_MOODS: PetMood[] = ["happy", "sad", "hungry", "sleepy", "playful", "neutral", "sick", "dead"];
+const VALID_SPECIES: PetSpecies[] = ["blob", "star", "mochi"];
+const VALID_COLORS: PetColor[] = ["yellow", "blue", "pink", "shiny"];
+const VALID_PERSONALITIES: PetPersonality[] = [
+  "sweet",
+  "chaotic",
+  "sleepy",
+  "curious",
+  "shy",
+  "sassy",
+];
+const VALID_MOODS: PetMood[] = [
+  "happy",
+  "sad",
+  "hungry",
+  "sleepy",
+  "playful",
+  "neutral",
+  "sick",
+  "dead",
+];
 const VALID_LIFE_STAGES: PetLifeStage[] = ["egg", "baby", "child", "adult"];
 
 // ===== Paths =====
@@ -74,7 +94,12 @@ function getOldStoragePath(): string {
 // ===== Validation =====
 
 function isStatValue(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100
+  );
 }
 
 export function validatePetState(data: unknown): data is PetState {
@@ -86,13 +111,17 @@ export function validatePetState(data: unknown): data is PetState {
 
   if (typeof obj.id !== "string" || obj.id.length === 0) return false;
   if (typeof obj.name !== "string" || obj.name.length === 0) return false;
-  if (typeof obj.hatchedAt !== "string" || obj.hatchedAt.length === 0) return false;
-  if (typeof obj.createdAt !== "string" || obj.createdAt.length === 0) return false;
-  if (typeof obj.updatedAt !== "string" || obj.updatedAt.length === 0) return false;
+  if (typeof obj.hatchedAt !== "string" || obj.hatchedAt.length === 0)
+    return false;
+  if (typeof obj.createdAt !== "string" || obj.createdAt.length === 0)
+    return false;
+  if (typeof obj.updatedAt !== "string" || obj.updatedAt.length === 0)
+    return false;
 
   if (!VALID_SPECIES.includes(obj.species as PetSpecies)) return false;
   if (!VALID_COLORS.includes(obj.color as PetColor)) return false;
-  if (!VALID_PERSONALITIES.includes(obj.personality as PetPersonality)) return false;
+  if (!VALID_PERSONALITIES.includes(obj.personality as PetPersonality))
+    return false;
   if (!VALID_MOODS.includes(obj.mood as PetMood)) return false;
   if (!VALID_LIFE_STAGES.includes(obj.lifeStage as PetLifeStage)) return false;
 
@@ -189,7 +218,9 @@ export function loadGameState(): GameState {
           eggs: Array.isArray(parsed.eggs) ? parsed.eggs : [],
           graveyard: Array.isArray(parsed.graveyard) ? parsed.graveyard : [],
           settings: {
-            overlayPets: Array.isArray(parsed.settings?.overlayPets) ? parsed.settings.overlayPets : [],
+            overlayPets: Array.isArray(parsed.settings?.overlayPets)
+              ? parsed.settings.overlayPets
+              : [],
           },
         };
         return state;
@@ -245,7 +276,7 @@ export function saveGameState(state: GameState): boolean {
  */
 export function loadPetState(): PetState | null {
   const game = loadGameState();
-  return game.pets.find(p => p.isAlive) || null;
+  return game.pets.find((p) => p.isAlive) || null;
 }
 
 /**
@@ -253,7 +284,7 @@ export function loadPetState(): PetState | null {
  */
 export function savePetState(state: PetState): boolean {
   const game = loadGameState();
-  const idx = game.pets.findIndex(p => p.id === state.id);
+  const idx = game.pets.findIndex((p) => p.id === state.id);
   if (idx >= 0) {
     game.pets[idx] = state;
   } else if (game.pets.length < MAX_PETS) {
@@ -296,11 +327,13 @@ export function addPet(pet: PetState): boolean {
  */
 export function removePet(petId: string): boolean {
   const game = loadGameState();
-  const pet = game.pets.find(p => p.id === petId);
+  const pet = game.pets.find((p) => p.id === petId);
   if (!pet) return false;
 
-  game.pets = game.pets.filter(p => p.id !== petId);
-  game.settings.overlayPets = game.settings.overlayPets.filter(id => id !== petId);
+  game.pets = game.pets.filter((p) => p.id !== petId);
+  game.settings.overlayPets = game.settings.overlayPets.filter(
+    (id) => id !== petId,
+  );
 
   // Add to graveyard
   game.graveyard.push({
@@ -334,9 +367,9 @@ export function addEgg(egg: Egg): boolean {
  */
 export function removeEgg(eggId: string): Egg | null {
   const game = loadGameState();
-  const egg = game.eggs.find(e => e.id === eggId);
+  const egg = game.eggs.find((e) => e.id === eggId);
   if (!egg) return null;
-  game.eggs = game.eggs.filter(e => e.id !== eggId);
+  game.eggs = game.eggs.filter((e) => e.id !== eggId);
   saveGameState(game);
   return egg;
 }
@@ -347,7 +380,7 @@ export function removeEgg(eggId: string): Egg | null {
 export function getReadyEggs(): Egg[] {
   const game = loadGameState();
   const now = Date.now();
-  return game.eggs.filter(e => now >= new Date(e.hatchAt).getTime());
+  return game.eggs.filter((e) => now >= new Date(e.hatchAt).getTime());
 }
 
 // ===== Overlay settings =====
@@ -361,6 +394,8 @@ export function setOverlayPets(petIds: string[]): boolean {
 export function getOverlayPets(): string[] {
   const game = loadGameState();
   // Filter to only living pets
-  const livingIds = new Set(game.pets.filter(p => p.isAlive).map(p => p.id));
-  return game.settings.overlayPets.filter(id => livingIds.has(id));
+  const livingIds = new Set(
+    game.pets.filter((p) => p.isAlive).map((p) => p.id),
+  );
+  return game.settings.overlayPets.filter((id) => livingIds.has(id));
 }

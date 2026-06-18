@@ -8,10 +8,10 @@
   overflow: hidden;
   position: relative;
   image-rendering: pixelated;
-  background-size: 192px 48px;
+  background-size: 240px 48px; /* 5 frames × 48px */
   background-repeat: no-repeat;
   background-position: 0 0;
-  animation: moveSpritesheet 1.3s steps(4) infinite;
+  animation: moveSpritesheet 1.3s steps(5) infinite;
   /* Prevent this element from affecting input focus */
   pointer-events: none;
   contain: strict;
@@ -32,7 +32,7 @@
     background-position: 0 0;
   }
   to {
-    background-position: -192px 0;
+    background-position: -240px 0;
   }
 }
 
@@ -55,48 +55,47 @@
   border-radius: 60% 40% 50% 70% / 50% 60% 40% 50%;
 }
 
-.pet-species-bun {
-  border-radius: 50% 50% 40% 40%;
-}
-
-.pet-species-sprout {
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-  width: 60px;
-  height: 90px;
-}
-
-.pet-species-ghost {
-  border-radius: 50% 50% 0 0;
-  height: 100px;
-}
-
 .pet-species-star {
-  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
 }
 
 /* Color classes */
-.pet-color-cream {
-  background-color: #FFF8E7;
-}
-
-.pet-color-pink {
-  background-color: #FFB5C8;
+.pet-color-yellow {
+  background-color: #ffeaa7;
 }
 
 .pet-color-blue {
-  background-color: #A8D8EA;
+  background-color: #a8d8ea;
 }
 
-.pet-color-mint {
-  background-color: #B5EAD7;
+.pet-color-pink {
+  background-color: #ffb5c8;
 }
 
-.pet-color-lavender {
-  background-color: #C9B1FF;
+.pet-color-shiny {
+  background: linear-gradient(135deg, #ffd700, #fff8dc, #ffd700);
+  animation: shiny-shimmer 2s ease-in-out infinite;
 }
 
-.pet-color-yellow {
-  background-color: #FFEAA7;
+@keyframes shiny-shimmer {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.3);
+  }
 }
 
 /* Personality animation classes */
@@ -128,33 +127,70 @@
 
 /* Keyframe animations */
 @keyframes gentle-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
 }
 
 @keyframes shake-wobble {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-3deg); }
-  75% { transform: rotate(3deg); }
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-3deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
 }
 
 @keyframes slow-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 @keyframes peek-around {
-  0%, 100% { transform: translateX(0); }
-  30% { transform: translateX(5px); }
-  70% { transform: translateX(-5px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(5px);
+  }
+  70% {
+    transform: translateX(-5px);
+  }
 }
 
 @keyframes hide-peek {
-  0%, 70%, 100% { transform: scale(0.9); opacity: 0.7; }
-  80% { transform: scale(1); opacity: 1; }
+  0%,
+  70%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+  }
+  80% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @keyframes sway {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(5deg); }
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(5deg);
+  }
 }

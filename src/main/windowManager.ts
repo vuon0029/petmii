@@ -17,8 +17,8 @@ let overlayVisible = false;
 
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 720,
+    width: 500,
+    height: 500,
     title: "petmii",
     icon: APP_ICON,
     resizable: true,
@@ -27,6 +27,10 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  });
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -75,7 +79,8 @@ export function createOverlayWindow(): BrowserWindow {
   }
 
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  const { width: screenWidth, height: screenHeight } =
+    primaryDisplay.workAreaSize;
 
   overlayWindow = new BrowserWindow({
     width: screenWidth,
@@ -110,6 +115,11 @@ export function createOverlayWindow(): BrowserWindow {
     if (overlayWindow && !overlayWindow.isDestroyed() && overlayVisible) {
       overlayWindow.setAlwaysOnTop(true, "screen-saver");
     }
+  });
+
+  overlayWindow.on("closed", () => {
+    overlayWindow = null;
+    overlayVisible = false;
   });
 
   const overlayURL = process.env.ELECTRON_RENDERER_URL
@@ -175,10 +185,12 @@ export function hideOverlay(): void {
 
 export function closeOverlayWindow(): void {
   overlayVisible = false;
+
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.close();
-    overlayWindow = null;
+    overlayWindow.destroy();
   }
+
+  overlayWindow = null;
 }
 
 export function restoreMainWindow(): void {

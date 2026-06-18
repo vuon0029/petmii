@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { generateRandomPet } from "./pet/generateRandomPet";
-import { DEFAULT_PET_STATS, PetState, SPECIES_DEFAULT_NAMES } from "./pet/petVariant";
+import {
+  DEFAULT_PET_STATS,
+  PetState,
+  SPECIES_DEFAULT_NAMES,
+} from "./pet/petVariant";
 import { EggHatchScreen } from "./components/EggHatchScreen";
 import { PetDetails } from "./components/PetDetails";
 import { RenamePetModal } from "./components/RenamePetModal";
@@ -16,9 +20,13 @@ export function App() {
   const [game, setGame] = useState<GameState | null>(null);
   const [selectedPetIndex, setSelectedPetIndex] = useState(0);
   const [showRenameModal, setShowRenameModal] = useState(false);
-  const [pendingPet, setPendingPet] = useState<ReturnType<typeof generateRandomPet> | null>(null);
+  const [pendingPet, setPendingPet] = useState<ReturnType<
+    typeof generateRandomPet
+  > | null>(null);
   const [lastDead, setLastDead] = useState<PetState | null>(null);
-  const [activeTab, setActiveTab] = useState<"pets" | "eggs" | "overlay" | "stats">("pets");
+  const [activeTab, setActiveTab] = useState<
+    "pets" | "eggs" | "overlay" | "stats"
+  >("pets");
   const [overlayOn, setOverlayOn] = useState(false);
 
   // Load game state on mount
@@ -107,14 +115,21 @@ export function App() {
 
     const generated = generateRandomPet();
     setPendingPet({
-      variant: { species: egg.species, color: generated.variant.color, personality: generated.variant.personality },
+      variant: {
+        species: egg.species,
+        color: generated.variant.color,
+        personality: generated.variant.personality,
+        lifeStage: "baby",
+      },
       isShiny: egg.isShiny,
     });
     setView("hatching");
   }
 
   async function handleDiscardEgg(eggId: string) {
-    const confirmed = window.confirm("Discard this egg? It will be lost forever.");
+    const confirmed = window.confirm(
+      "Discard this egg? It will be lost forever.",
+    );
     if (!confirmed) return;
     await window.petmiiAPI.hatchEgg(eggId); // removes egg from storage
     const fresh = await window.petmiiAPI.loadGame();
@@ -147,14 +162,18 @@ export function App() {
 
   async function handleRename(newName: string) {
     if (!selectedPet) return;
-    const updated = { ...selectedPet, name: newName.trim(), updatedAt: new Date().toISOString() };
+    const updated = {
+      ...selectedPet,
+      name: newName.trim(),
+      updatedAt: new Date().toISOString(),
+    };
     await savePet(updated);
     setShowRenameModal(false);
   }
 
   async function handleReset() {
     const confirmed = window.confirm(
-      `Release ${selectedPet?.name}? This pet will be gone forever.`
+      `Release ${selectedPet?.name}? This pet will be gone forever.`,
     );
     if (!confirmed) return;
     await window.petmiiAPI.removePet(selectedPet!.id);
@@ -224,16 +243,32 @@ export function App() {
     <div className="app-container">
       {/* Tabs */}
       <div className="app-tabs">
-        <button type="button" className={`app-tab ${activeTab === "pets" ? "app-tab-active" : ""}`} onClick={() => setActiveTab("pets")}>
+        <button
+          type="button"
+          className={`app-tab ${activeTab === "pets" ? "app-tab-active" : ""}`}
+          onClick={() => setActiveTab("pets")}
+        >
           🐾 Pets
         </button>
-        <button type="button" className={`app-tab ${activeTab === "eggs" ? "app-tab-active" : ""}`} onClick={() => setActiveTab("eggs")}>
+        <button
+          type="button"
+          className={`app-tab ${activeTab === "eggs" ? "app-tab-active" : ""}`}
+          onClick={() => setActiveTab("eggs")}
+        >
           🥚 Eggs ({game.eggs.length})
         </button>
-        <button type="button" className={`app-tab ${activeTab === "overlay" ? "app-tab-active" : ""}`} onClick={() => setActiveTab("overlay")}>
+        <button
+          type="button"
+          className={`app-tab ${activeTab === "overlay" ? "app-tab-active" : ""}`}
+          onClick={() => setActiveTab("overlay")}
+        >
           👁 Overlay
         </button>
-        <button type="button" className={`app-tab ${activeTab === "stats" ? "app-tab-active" : ""}`} onClick={() => setActiveTab("stats")}>
+        <button
+          type="button"
+          className={`app-tab ${activeTab === "stats" ? "app-tab-active" : ""}`}
+          onClick={() => setActiveTab("stats")}
+        >
           📊
         </button>
       </div>
@@ -243,9 +278,23 @@ export function App() {
           {/* Pet navigation */}
           {game.pets.length > 1 && (
             <div className="pet-nav">
-              <button type="button" onClick={handlePrevPet} className="pet-nav-btn">◀</button>
-              <span className="pet-nav-label">{selectedPetIndex + 1} / {game.pets.length}</span>
-              <button type="button" onClick={handleNextPet} className="pet-nav-btn">▶</button>
+              <button
+                type="button"
+                onClick={handlePrevPet}
+                className="pet-nav-btn"
+              >
+                ◀
+              </button>
+              <span className="pet-nav-label">
+                {selectedPetIndex + 1} / {game.pets.length}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextPet}
+                className="pet-nav-btn"
+              >
+                ▶
+              </button>
             </div>
           )}
 
@@ -255,7 +304,8 @@ export function App() {
                 petState={selectedPet}
                 onReset={handleReset}
                 onRename={() => {
-                  if (selectedPet.lifeStage === "adult") setShowRenameModal(true);
+                  if (selectedPet.lifeStage === "adult")
+                    setShowRenameModal(true);
                 }}
                 onFeed={handleFeed}
                 onPlay={handlePlay}
@@ -275,14 +325,21 @@ export function App() {
           {game.pets.length === 0 && (
             <div className="no-pets-message">
               <p>No pets yet. Check your eggs!</p>
-              <button type="button" onClick={() => setActiveTab("eggs")}>View Eggs</button>
+              <button type="button" onClick={() => setActiveTab("eggs")}>
+                View Eggs
+              </button>
             </div>
           )}
         </>
       )}
 
       {activeTab === "eggs" && (
-        <EggList eggs={game.eggs} onHatch={handleEggHatch} onDiscard={handleDiscardEgg} pets={game.pets} />
+        <EggList
+          eggs={game.eggs}
+          onHatch={handleEggHatch}
+          onDiscard={handleDiscardEgg}
+          pets={game.pets}
+        />
       )}
 
       {activeTab === "overlay" && (
@@ -292,7 +349,7 @@ export function App() {
             className={`overlay-toggle-btn ${overlayOn ? "overlay-toggle-on" : ""}`}
             onClick={() => {
               window.petmiiAPI.enterOverlayMode();
-              setOverlayOn(prev => !prev);
+              setOverlayOn((prev) => !prev);
             }}
           >
             {overlayOn ? "🟢 Overlay: ON" : "⚫ Overlay: OFF"}
@@ -300,10 +357,13 @@ export function App() {
 
           <h4>Pets in Overlay (max 4)</h4>
           <div className="overlay-selection-list">
-            {game.pets.map(p => {
+            {game.pets.map((p) => {
               const isInOverlay = game.settings.overlayPets.includes(p.id);
               return (
-                <label key={p.id} className={`overlay-selection-item ${overlayOn ? "disabled" : ""}`}>
+                <label
+                  key={p.id}
+                  className={`overlay-selection-item ${overlayOn ? "disabled" : ""}`}
+                >
                   <input
                     type="checkbox"
                     checked={isInOverlay}
@@ -312,10 +372,14 @@ export function App() {
                       if (overlayOn) return;
                       let newIds: string[];
                       if (isInOverlay) {
-                        newIds = game.settings.overlayPets.filter(id => id !== p.id);
+                        newIds = game.settings.overlayPets.filter(
+                          (id) => id !== p.id,
+                        );
                       } else {
                         if (game.settings.overlayPets.length >= 4) {
-                          window.alert("Maximum 4 pets can be shown in overlay mode.");
+                          window.alert(
+                            "Maximum 4 pets can be shown in overlay mode.",
+                          );
                           return;
                         }
                         newIds = [...game.settings.overlayPets, p.id];
@@ -325,12 +389,18 @@ export function App() {
                       setGame(fresh);
                     }}
                   />
-                  <span>{p.name} ({p.species})</span>
+                  <span>
+                    {p.name} ({p.species})
+                  </span>
                 </label>
               );
             })}
           </div>
-          {overlayOn && <p className="overlay-tab-note">Turn off overlay to change selection</p>}
+          {overlayOn && (
+            <p className="overlay-tab-note">
+              Turn off overlay to change selection
+            </p>
+          )}
         </div>
       )}
 
@@ -349,19 +419,51 @@ function clamp(value: number, min = 0, max = 100): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function applyAction(pet: PetState, action: "feed" | "play" | "clean" | "rest"): PetState {
+function applyAction(
+  pet: PetState,
+  action: "feed" | "play" | "clean" | "rest",
+): PetState {
   const now = new Date().toISOString();
   const AMOUNT = 20;
   const BOND = 2;
 
   switch (action) {
     case "feed":
-      return { ...pet, hunger: clamp(pet.hunger + AMOUNT), energy: clamp(pet.energy + 5), bond: clamp(pet.bond + BOND), lastFedAt: now, updatedAt: now };
+      return {
+        ...pet,
+        hunger: clamp(pet.hunger + AMOUNT),
+        energy: clamp(pet.energy + 5),
+        bond: clamp(pet.bond + BOND),
+        lastFedAt: now,
+        updatedAt: now,
+      };
     case "play":
-      return { ...pet, happiness: clamp(pet.happiness + AMOUNT), energy: clamp(pet.energy - 10), hunger: clamp(pet.hunger - 5), bond: clamp(pet.bond + BOND), lastPlayedAt: now, updatedAt: now };
+      return {
+        ...pet,
+        happiness: clamp(pet.happiness + AMOUNT),
+        energy: clamp(pet.energy - 10),
+        hunger: clamp(pet.hunger - 5),
+        bond: clamp(pet.bond + BOND),
+        lastPlayedAt: now,
+        updatedAt: now,
+      };
     case "clean":
-      return { ...pet, cleanliness: clamp(pet.cleanliness + 25), happiness: clamp(pet.happiness + 5), bond: clamp(pet.bond + BOND), lastCleanedAt: now, updatedAt: now };
+      return {
+        ...pet,
+        cleanliness: clamp(pet.cleanliness + 25),
+        happiness: clamp(pet.happiness + 5),
+        bond: clamp(pet.bond + BOND),
+        lastCleanedAt: now,
+        updatedAt: now,
+      };
     case "rest":
-      return { ...pet, energy: clamp(pet.energy + 25), hunger: clamp(pet.hunger - 5), bond: clamp(pet.bond + BOND), lastRestedAt: now, updatedAt: now };
+      return {
+        ...pet,
+        energy: clamp(pet.energy + 25),
+        hunger: clamp(pet.hunger - 5),
+        bond: clamp(pet.bond + BOND),
+        lastRestedAt: now,
+        updatedAt: now,
+      };
   }
 }

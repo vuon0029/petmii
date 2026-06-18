@@ -64,7 +64,11 @@ export function PetDetails({
       {/* Top bar: Reset only */}
       <div className="pet-details-topbar">
         <div className="pet-details-topbar-actions">
-          <button type="button" onClick={onReset} className="pet-details-reset-btn">
+          <button
+            type="button"
+            onClick={onReset}
+            className="pet-details-reset-btn"
+          >
             ↺
           </button>
         </div>
@@ -86,16 +90,20 @@ export function PetDetails({
           )}
         </div>
         <p className="pet-details-info">
-          {petState.species} · {petState.color} · {petState.personality}
-          {petState.isShiny && " ✨"}
+          {petState.species} · {petState.color}
+          {petState.isShiny && " ✨"} · {petState.personality}
         </p>
       </div>
 
       {/* Stage & age info */}
       <div className="pet-details-stage">
         <span className="pet-details-stage-badge">{petState.lifeStage}</span>
-        <span className="pet-details-age">Age: {formatAge(petState.hatchedAt)}</span>
-        {nextStage && <span className="pet-details-next-stage">{nextStage}</span>}
+        <span className="pet-details-age">
+          Age: {formatAge(petState.hatchedAt)}
+        </span>
+        {nextStage && (
+          <span className="pet-details-next-stage">{nextStage}</span>
+        )}
       </div>
 
       <div className="pet-details-avatar">
@@ -103,6 +111,7 @@ export function PetDetails({
           species={petState.species}
           color={petState.color}
           personality={petState.personality}
+          lifeStage={petState.lifeStage}
         />
         <div className="pet-details-speech-wrapper">
           {petState.lastMessage && petState.lastMessage !== "~" && (
@@ -116,19 +125,51 @@ export function PetDetails({
       <p className="pet-details-mood">{petState.mood}</p>
 
       <div className="pet-details-stats">
-        <StatBar label="HP" value={petState.hp} color="#e53935" />
-        <StatBar label="Hunger" value={petState.hunger} color="#ff9800" />
-        <StatBar label="Happiness" value={petState.happiness} color="#ffc107" />
-        <StatBar label="Energy" value={petState.energy} color="#4caf50" />
-        <StatBar label="Cleanliness" value={petState.cleanliness} color="#2196f3" />
-        <StatBar label="Bond" value={petState.bond} color="#e91e63" />
+        <StatBar
+          label={`HP: ${petState.hp.toFixed(2)}`}
+          value={petState.hp}
+          color="#e53935"
+        />
+        <StatBar
+          label={`Hunger: ${petState.hunger.toFixed(2)}`}
+          value={petState.hunger}
+          color="#ff9800"
+        />
+        <StatBar
+          label={`Happiness: ${petState.happiness.toFixed(2)}`}
+          value={petState.happiness}
+          color="#ffc107"
+        />
+        <StatBar
+          label={`Energy: ${petState.energy.toFixed(2)}`}
+          value={petState.energy}
+          color="#4caf50"
+        />
+        <StatBar
+          label={`Cleanliness: ${petState.cleanliness.toFixed(2)}`}
+          value={petState.cleanliness}
+          color="#2196f3"
+        />
+        <StatBar
+          label={`Bond: ${petState.bond.toFixed(2)}`}
+          value={petState.bond}
+          color="#e91e63"
+        />
       </div>
 
       <div className="pet-details-actions">
-        <button type="button" onClick={onFeed}>Feed</button>
-        <button type="button" onClick={onPlay}>Play</button>
-        <button type="button" onClick={onClean}>Clean</button>
-        <button type="button" onClick={onRest}>Rest</button>
+        <button type="button" onClick={onFeed}>
+          Feed
+        </button>
+        <button type="button" onClick={onPlay}>
+          Play
+        </button>
+        <button type="button" onClick={onClean}>
+          Clean
+        </button>
+        <button type="button" onClick={onRest}>
+          Rest
+        </button>
       </div>
     </div>
   );

@@ -1,28 +1,31 @@
-// Auto-generated sprite registry.
-// Maps species/color/mood to statically imported sprite URLs.
+// Sprite registry — maps species/color/mood to statically imported sprite URLs.
+// Colors: yellow, blue, pink, shiny
+// Species: blob, star, mochi
 
 // blob sprites
 import blobBlueIdle from "./blob/blue/idle.png";
-import blobBlueHappy from "./blob/blue/happy.png";
-import blobCreamIdle from "./blob/cream/idle.png";
-import blobCreamHappy from "./blob/cream/happy.png";
-import blobLavenderIdle from "./blob/lavender/idle.png";
-import blobLavenderHappy from "./blob/lavender/happy.png";
-import blobMintIdle from "./blob/mint/idle.png";
-import blobMintHappy from "./blob/mint/happy.png";
+import blobBlueAdult from "./blob/blue/adult.png";
+
 import blobPinkIdle from "./blob/pink/idle.png";
-import blobPinkHappy from "./blob/pink/happy.png";
+import blobPinkAdult from "./blob/pink/adult.png";
+
 import blobYellowIdle from "./blob/yellow/idle.png";
-import blobYellowHappy from "./blob/yellow/happy.png";
+import blobYellowAdult from "./blob/yellow/adult.png";
+
+import blobShinyIdle from "./blob/shiny/idle.png";
+import blobShinyAdult from "./blob/shiny/adult.png";
 
 // Lookup: sprites[species][color][mood] = url
 export const sprites: Record<string, Record<string, Record<string, string>>> = {
   blob: {
-    blue: { idle: blobBlueIdle, happy: blobBlueHappy },
-    cream: { idle: blobCreamIdle, happy: blobCreamHappy },
-    lavender: { idle: blobLavenderIdle, happy: blobLavenderHappy },
-    mint: { idle: blobMintIdle, happy: blobMintHappy },
-    pink: { idle: blobPinkIdle, happy: blobPinkHappy },
-    yellow: { idle: blobYellowIdle, happy: blobYellowHappy },
+    blue: { baby: blobBlueIdle, child: blobBlueIdle, adult: blobBlueAdult },
+    pink: { baby: blobPinkIdle, child: blobPinkIdle, adult: blobPinkAdult },
+    yellow: {
+      baby: blobYellowIdle,
+      child: blobYellowIdle,
+      adult: blobYellowAdult,
+    },
+    shiny: { baby: blobShinyIdle, child: blobShinyIdle, adult: blobShinyAdult },
   },
+  // star and mochi will be added when sprites are created
 };

@@ -4,9 +4,14 @@
 
 import { BrowserWindow } from "electron";
 import { randomUUID } from "node:crypto";
-import { loadGameState, saveGameState, addEgg, removePet, EGG_HATCH_HOURS } from "./petStorage";
+import { loadGameState, saveGameState, EGG_HATCH_HOURS } from "./petStorage";
 import type { Egg, GameState } from "./petStorage";
-import type { PetState, PetLifeStage, PetMood, PetSpecies } from "../renderer/pet/petVariant";
+import type {
+  PetState,
+  PetLifeStage,
+  PetMood,
+  PetSpecies,
+} from "../renderer/pet/petVariant";
 import { SPECIES_TRAITS } from "../renderer/pet/speciesTraits";
 import { PERSONALITY_TRAITS } from "../renderer/pet/personalityTraits";
 import { hideOverlay, restoreMainWindow } from "./windowManager";
@@ -15,39 +20,36 @@ import { hideOverlay, restoreMainWindow } from "./windowManager";
 const DECAY_TICK_MS = 60_000; // every 60 seconds
 
 // Egg discovery check interval
-const EGG_CHECK_INTERVAL_TICKS = 1; // TESTING: every tick (normal: 60)
+const EGG_CHECK_INTERVAL_TICKS = 60;
 
 // Base decay rates (points per hour)
 const BASE_DECAY = {
-  hunger: 4,
-  happiness: 2.5,
-  energy: 2,
-  cleanliness: 1.5,
+  hunger: 12,
+  happiness: 5,
+  energy: 10,
+  cleanliness: 5,
   bond: 0.5,
 };
 
-// HP mechanics
-const HP_DAMAGE_RATE = 5;
-const HP_RECOVERY_RATE = 2;
+const HP_RECOVERY_RATE = 5;
 
 // Life stage decay multipliers
 const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
   egg: 0,
-  baby: 1.5,
+  baby: 1.2,
   child: 1.0,
-  adult: 0.8,
+  adult: 1.5,
 };
 
 // Egg discovery config
-const EGG_DAILY_CHANCE = 0.15; // 15% per day
-const EGG_HOURLY_CHANCE = 0.90; // TESTING: 90% per check (normal: EGG_DAILY_CHANCE / 24)
-const HEALTHY_STAT_THRESHOLD = 10; // TESTING: very low threshold (normal: 60)
-const HEALTHY_HOURS_REQUIRED = 24;
+const EGG_DAILY_CHANCE = 0.3; // 15% per day
+const EGG_HOURLY_CHANCE = EGG_DAILY_CHANCE / 24;
+const HEALTHY_STAT_THRESHOLD = 60;
 const MAX_EGGS = 3;
-const SHINY_EGG_CHANCE = 1 / 4000;
-const SAME_SPECIES_WEIGHT = 3; // 3x more likely to find same species egg
+const SHINY_EGG_CHANCE = 1 / 100;
+const SAME_SPECIES_WEIGHT = 2; // 2x more likely to find same species egg
 
-const ALL_SPECIES: PetSpecies[] = ["mochi", "blob", "bun", "sprout", "ghost", "star"];
+const ALL_SPECIES: PetSpecies[] = ["blob", "star", "mochi"];
 
 let decayInterval: ReturnType<typeof setInterval> | null = null;
 let tickCount = 0;
@@ -99,8 +101,10 @@ function tickDecay(): void {
 
   // Handle deaths — remove dead pets, add to graveyard
   for (const deadPet of deaths) {
-    game.pets = game.pets.filter(p => p.id !== deadPet.id);
-    game.settings.overlayPets = game.settings.overlayPets.filter(id => id !== deadPet.id);
+    game.pets = game.pets.filter((p) => p.id !== deadPet.id);
+    game.settings.overlayPets = game.settings.overlayPets.filter(
+      (id) => id !== deadPet.id,
+    );
     game.graveyard.push({
       id: deadPet.id,
       name: deadPet.name,
@@ -121,7 +125,7 @@ function tickDecay(): void {
   }
 
   // Mercy egg: if 0 living pets and 0 eggs, spawn one
-  const livingPets = game.pets.filter(p => p.isAlive);
+  const livingPets = game.pets.filter((p) => p.isAlive);
   if (livingPets.length === 0 && game.eggs.length === 0) {
     spawnMercyEgg(game);
   }
@@ -148,13 +152,26 @@ function tickDecay(): void {
 function checkEggDiscovery(game: GameState): void {
   if (game.eggs.length >= MAX_EGGS) return;
 
-  const livingPets = game.pets.filter(p => p.isAlive);
-  console.log("[petmii] Egg check: living pets =", livingPets.length, "eggs =", game.eggs.length);
+  const livingPets = game.pets.filter((p) => p.isAlive);
+  console.log(
+    "[petmii] Egg check: living pets =",
+    livingPets.length,
+    "eggs =",
+    game.eggs.length,
+  );
 
   for (const pet of livingPets) {
     if (game.eggs.length >= MAX_EGGS) break;
     const healthy = isPetHealthyForEgg(pet);
-    console.log("[petmii] Pet", pet.name, "healthy for egg:", healthy, "(bond:", pet.bond, ")");
+    console.log(
+      "[petmii] Pet",
+      pet.name,
+      "healthy for egg:",
+      healthy,
+      "(bond:",
+      pet.bond,
+      ")",
+    );
     if (!healthy) continue;
 
     if (Math.random() < EGG_HOURLY_CHANCE) {
@@ -171,8 +188,7 @@ function checkEggDiscovery(game: GameState): void {
  * All stats > 60, and pet is adult.
  */
 function isPetHealthyForEgg(pet: PetState): boolean {
-  // TESTING: allow all stages (normal: only "adult")
-  if (pet.lifeStage !== "adult" && pet.lifeStage !== "child" && pet.lifeStage !== "baby") return false;
+  if (pet.lifeStage !== "adult") return false;
   if (pet.hunger < HEALTHY_STAT_THRESHOLD) return false;
   if (pet.happiness < HEALTHY_STAT_THRESHOLD) return false;
   if (pet.energy < HEALTHY_STAT_THRESHOLD) return false;
@@ -204,10 +220,12 @@ function generateEgg(finder: PetState): Egg {
  * Roll egg species — finder's species is weighted higher.
  */
 function rollEggSpecies(finderSpecies: PetSpecies): PetSpecies {
-  const weights: { species: PetSpecies; weight: number }[] = ALL_SPECIES.map(s => ({
-    species: s,
-    weight: s === finderSpecies ? SAME_SPECIES_WEIGHT : 1,
-  }));
+  const weights: { species: PetSpecies; weight: number }[] = ALL_SPECIES.map(
+    (s) => ({
+      species: s,
+      weight: s === finderSpecies ? SAME_SPECIES_WEIGHT : 1,
+    }),
+  );
 
   const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
   let roll = Math.random() * totalWeight;
@@ -253,27 +271,49 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   const stageMultiplier = STAGE_MULTIPLIERS[state.lifeStage];
 
   const effectiveDecay = {
-    hunger: BASE_DECAY.hunger * speciesTraits.decay.hunger * personalityTraits.decayMultipliers.hunger * stageMultiplier,
-    happiness: BASE_DECAY.happiness * speciesTraits.decay.happiness * personalityTraits.decayMultipliers.happiness * stageMultiplier,
-    energy: BASE_DECAY.energy * speciesTraits.decay.energy * personalityTraits.decayMultipliers.energy * stageMultiplier,
-    cleanliness: BASE_DECAY.cleanliness * speciesTraits.decay.cleanliness * personalityTraits.decayMultipliers.cleanliness * stageMultiplier,
-    bond: BASE_DECAY.bond * speciesTraits.decay.bond * personalityTraits.decayMultipliers.bond * stageMultiplier,
+    hunger:
+      BASE_DECAY.hunger *
+      speciesTraits.decay.hunger *
+      personalityTraits.decayMultipliers.hunger *
+      stageMultiplier,
+    happiness:
+      BASE_DECAY.happiness *
+      speciesTraits.decay.happiness *
+      personalityTraits.decayMultipliers.happiness *
+      stageMultiplier,
+    energy:
+      BASE_DECAY.energy *
+      speciesTraits.decay.energy *
+      personalityTraits.decayMultipliers.energy *
+      stageMultiplier,
+    cleanliness:
+      BASE_DECAY.cleanliness *
+      speciesTraits.decay.cleanliness *
+      personalityTraits.decayMultipliers.cleanliness *
+      stageMultiplier,
+    bond:
+      BASE_DECAY.bond *
+      speciesTraits.decay.bond *
+      personalityTraits.decayMultipliers.bond *
+      stageMultiplier,
   };
 
   // Cross-stat effects
   if (state.hunger <= 0) {
-    effectiveDecay.energy *= 3;
-    effectiveDecay.happiness *= 3;
+    effectiveDecay.energy *= 5;
+    effectiveDecay.happiness *= 5;
   } else if (state.hunger < 30) {
-    effectiveDecay.happiness *= 2;
+    effectiveDecay.happiness *= 3;
   }
 
-  const zeroCount = [state.hunger, state.happiness, state.energy].filter((v) => v <= 0).length;
+  const zeroCount = [state.hunger, state.happiness, state.energy].filter(
+    (v) => v <= 0,
+  ).length;
   if (zeroCount >= 2) {
-    effectiveDecay.hunger *= 2;
-    effectiveDecay.happiness *= 2;
-    effectiveDecay.energy *= 2;
-    effectiveDecay.cleanliness *= 2;
+    effectiveDecay.hunger *= 10;
+    effectiveDecay.happiness *= 10;
+    effectiveDecay.energy *= 10;
+    effectiveDecay.cleanliness *= 10;
   }
 
   if (state.cleanliness < 20) effectiveDecay.happiness *= 1.5;
@@ -284,7 +324,9 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   state.hunger = clamp(state.hunger - effectiveDecay.hunger * hours);
   state.happiness = clamp(state.happiness - effectiveDecay.happiness * hours);
   state.energy = clamp(state.energy - effectiveDecay.energy * hours);
-  state.cleanliness = clamp(state.cleanliness - effectiveDecay.cleanliness * hours);
+  state.cleanliness = clamp(
+    state.cleanliness - effectiveDecay.cleanliness * hours,
+  );
   state.bond = clamp(state.bond - effectiveDecay.bond * hours);
 
   // HP mechanics
@@ -294,15 +336,26 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
     state.energy <= 0,
   ].filter(Boolean).length;
 
+  const HP_DAMAGE_PER_HOUR = {
+    oneCritical: 30,
+    twoCritical: 300,
+    threeCritical: 1200,
+  };
+
   if (criticalStats >= 3) {
-    state.hp = clamp(state.hp - 60 * hours);
+    state.hp = clamp(state.hp - HP_DAMAGE_PER_HOUR.threeCritical * hours);
   } else if (criticalStats >= 2) {
-    state.hp = clamp(state.hp - 25 * hours);
-  } else if (state.hunger <= 0) {
-    state.hp = clamp(state.hp - HP_DAMAGE_RATE * hours);
+    state.hp = clamp(state.hp - HP_DAMAGE_PER_HOUR.twoCritical * hours);
+  } else if (criticalStats >= 1) {
+    state.hp = clamp(state.hp - HP_DAMAGE_PER_HOUR.oneCritical * hours);
   }
 
-  if (state.hunger > 30 && state.happiness > 20 && criticalStats === 0 && state.hp < 100) {
+  if (
+    state.hunger > 30 &&
+    state.happiness > 20 &&
+    criticalStats === 0 &&
+    state.hp < 100
+  ) {
     state.hp = clamp(state.hp + HP_RECOVERY_RATE * hours);
   }
 
@@ -329,15 +382,25 @@ function checkLifeStageProgression(pet: PetState): PetState {
   if (!pet.isAlive) return pet;
 
   const speciesTraits = SPECIES_TRAITS[pet.species];
-  const ageHours = (Date.now() - new Date(pet.hatchedAt).getTime()) / (1000 * 60 * 60);
+  const ageHours =
+    (Date.now() - new Date(pet.hatchedAt).getTime()) / (1000 * 60 * 60);
   const canEvolve = pet.hunger > 20;
 
-  if (pet.lifeStage === "baby" && ageHours >= speciesTraits.stages.babyToChild && canEvolve) {
-    return { ...pet, lifeStage: "child", lastMessage: "I feel bigger~!" };
+  if (
+    pet.lifeStage === "baby" &&
+    ageHours >= speciesTraits.stages.babyToChild &&
+    canEvolve
+  ) {
+    return { ...pet, lifeStage: "child", lastMessage: "I feel smarter~!" };
   }
 
-  if (pet.lifeStage === "child" && ageHours >= (speciesTraits.stages.babyToChild + speciesTraits.stages.childToAdult) && canEvolve) {
-    return { ...pet, lifeStage: "adult", lastMessage: "Look at me now~!" };
+  if (
+    pet.lifeStage === "child" &&
+    ageHours >=
+      speciesTraits.stages.babyToChild + speciesTraits.stages.childToAdult &&
+    canEvolve
+  ) {
+    return { ...pet, lifeStage: "adult", lastMessage: "Look at me now!" };
   }
 
   return pet;
@@ -356,14 +419,14 @@ function deriveMoodFromStats(pet: PetState): PetMood {
 
 function deriveMessageFromStats(pet: PetState): string {
   if (pet.hp < 10) return "...";
-  if (pet.hp < 25) return "I don't feel so good...";
-  if (pet.hp < 50) return "Help me... please...";
+  if (pet.hp < 25) return "I don't feel good...";
+  if (pet.hp < 50) return "Help me...";
   if (pet.hp < 80) return "My tummy hurts...";
   if (pet.hunger < 10) return "I'm starving!!";
   if (pet.hunger < 25) return "Feed me~";
-  if (pet.energy < 10) return "So... sleepy...";
+  if (pet.energy < 10) return "So... eepy...";
   if (pet.energy < 25) return "I wanna nap...";
-  if (pet.cleanliness < 15) return "I'm all icky...";
+  if (pet.cleanliness < 15) return "THIS GUY STINKS!";
   if (pet.happiness < 15) return "I'm lonely...";
   if (pet.happiness < 30) return "Play with me~?";
   if (pet.bond > 80 && pet.happiness > 70) return "I love you!";
@@ -372,7 +435,8 @@ function deriveMessageFromStats(pet: PetState): string {
   if (pet.energy > 80 && pet.happiness > 60) return "Let's go!";
 
   // Random idle chatter — low chance per tick so pets don't all speak together
-  if (Math.random() < 0.05) { // TESTING: 5% per tick per pet (normal: 0.05)
+  if (Math.random() < 0.2) {
+    // 10% per tick per pet
     return randomFrom(IDLE_CHATTER);
   }
 
@@ -380,8 +444,22 @@ function deriveMessageFromStats(pet: PetState): string {
 }
 
 const IDLE_CHATTER = [
-  "♪", "♪♪", "...", "Hmm~", "Zzz...", "!", "~", "Hehe",
-  "*yawn*", "La la la~", "○○○", "?", "*stretch*", "Nom", "*wiggle*", "^^",
+  "♪",
+  "♪♪",
+  "...",
+  "Hmm~",
+  "Zzz...",
+  "!",
+  "~",
+  "Hehe",
+  "*yawns*",
+  "La la la~",
+  "○○○",
+  "?",
+  "*stretches*",
+  "Nom",
+  "*wiggles*",
+  "^_^",
 ];
 
 function randomFrom<T>(arr: T[]): T {
