@@ -35,6 +35,15 @@
   background-color: #e0d0ff !important;
 }
 
+.pet-details-overlay-on {
+  background-color: #4caf50 !important;
+  color: #fff !important;
+}
+
+.pet-details-overlay-on:hover {
+  background-color: #43a047 !important;
+}
+
 .pet-details-reset-btn {
   padding: 5px 10px !important;
   font-size: 0.85rem !important;

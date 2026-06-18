@@ -1,0 +1,62 @@
+/* Pet Carousel — navigation between multiple pets */
+
+.pet-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0;
+  width: 100%;
+}
+
+.pet-carousel-arrow {
+  background: #f0e6ff;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+  color: #7c4dff;
+}
+
+.pet-carousel-arrow:hover {
+  background: #e0d0ff;
+  transform: scale(1.1);
+}
+
+.pet-carousel-arrow:active {
+  transform: scale(0.95);
+}
+
+.pet-carousel-indicators {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pet-carousel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #d0c0e8;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.pet-carousel-dot:hover {
+  border-color: #7c4dff;
+  transform: scale(1.2);
+}
+
+.pet-carousel-dot.active {
+  background: #7c4dff;
+  border-color: #7c4dff;
+  transform: scale(1.15);
+}

@@ -1,13 +1,8 @@
 import { PetState } from "../pet/petVariant";
 import { PetAvatar } from "./PetAvatar";
 import { StatBar } from "./StatBar";
-import { lazy, Suspense } from "react";
 import { SPECIES_TRAITS } from "../pet/speciesTraits";
 import "../styles/pet-details.css";
-
-const ResourceMonitor = lazy(() =>
-  import("./ResourceMonitor").then((m) => ({ default: m.ResourceMonitor }))
-);
 
 interface PetDetailsProps {
   petState: PetState;
@@ -17,7 +12,6 @@ interface PetDetailsProps {
   onPlay: () => void;
   onClean: () => void;
   onRest: () => void;
-  onOverlayMode: () => void;
 }
 
 function formatAge(hatchedAt: string): string {
@@ -61,29 +55,20 @@ export function PetDetails({
   onPlay,
   onClean,
   onRest,
-  onOverlayMode,
 }: PetDetailsProps) {
   const canRename = petState.lifeStage === "adult";
   const nextStage = getNextStageInfo(petState);
 
   return (
     <div className="pet-details">
-      {/* Top bar: Overlay + Reset */}
+      {/* Top bar: Reset only */}
       <div className="pet-details-topbar">
         <div className="pet-details-topbar-actions">
-          <button type="button" onClick={onOverlayMode} className="pet-details-overlay-btn">
-            🐾 Overlay
-          </button>
           <button type="button" onClick={onReset} className="pet-details-reset-btn">
             ↺
           </button>
         </div>
       </div>
-
-      {/* Resource monitor row */}
-      <Suspense fallback={null}>
-        <ResourceMonitor />
-      </Suspense>
 
       {/* Pet name with pencil for rename */}
       <div className="pet-details-header">

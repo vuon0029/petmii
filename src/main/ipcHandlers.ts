@@ -2,8 +2,19 @@
 // Registers IPC handlers bridging renderer to storage and window management.
 
 import { app, ipcMain } from "electron";
-import { loadPetState, savePetState, clearPetState } from "./petStorage";
-import { loadGraveyard, removeFromGraveyard } from "./graveyard";
+import {
+  loadGameState,
+  saveGameState,
+  savePetState,
+  clearPetState,
+  addPet,
+  removePet,
+  removeEgg,
+  setOverlayPets,
+  getOverlayPets,
+} from "./petStorage";
+import type { GameState, Egg } from "./petStorage";
+import type { PetState } from "../renderer/pet/petVariant";
 import {
   closeOverlayWindow,
   getOverlayWindow,
@@ -11,46 +22,102 @@ import {
   hideOverlay,
   getMainWindow,
   restoreMainWindow,
-  startDrag,
-  moveDrag,
-  endDrag,
+  isOverlayVisible,
 } from "./windowManager";
 
 export function registerIpcHandlers(): void {
-  ipcMain.handle("pet:load", () => {
-    const pet = loadPetState();
-    console.log("[petmii] IPC pet:load →", pet ? `${pet.name} (alive=${pet.isAlive})` : "null");
-    return pet;
+  // ===== Game State =====
+
+  ipcMain.handle("game:load", () => {
+    const game = loadGameState();
+    console.log("[petmii] IPC game:load →", `${game.pets.length} pets, ${game.eggs.length} eggs`);
+    return game;
   });
-  ipcMain.handle("pet:save", (_, state) => {
+
+  ipcMain.handle("game:save", (_, state: GameState) => {
+    const result = saveGameState(state);
+    console.log("[petmii] IPC game:save →", result ? "success" : "FAILED");
+    return result;
+  });
+
+  // ===== Pet Operations =====
+
+  ipcMain.handle("pet:load", () => {
+    const game = loadGameState();
+    return game.pets;
+  });
+
+  ipcMain.handle("pet:save", (_, state: PetState) => {
     const result = savePetState(state);
     console.log("[petmii] IPC pet:save →", result ? "success" : "FAILED", state?.name);
     return result;
   });
+
+  ipcMain.handle("pet:add", (_, state: PetState) => {
+    const result = addPet(state);
+    console.log("[petmii] IPC pet:add →", result ? "success" : "FAILED (max reached?)", state?.name);
+    return result;
+  });
+
+  ipcMain.handle("pet:remove", (_, petId: string) => {
+    const result = removePet(petId);
+    console.log("[petmii] IPC pet:remove →", result ? "success" : "FAILED", petId);
+    return result;
+  });
+
   ipcMain.handle("pet:clear", () => {
     const result = clearPetState();
     console.log("[petmii] IPC pet:clear →", result ? "cleared" : "FAILED");
     return result;
   });
 
+  // ===== Egg Operations =====
+
+  ipcMain.handle("egg:hatch", (_, eggId: string) => {
+    const egg = removeEgg(eggId);
+    console.log("[petmii] IPC egg:hatch →", egg ? `${egg.species} egg` : "not found");
+    return egg;
+  });
+
+  // ===== Overlay Settings =====
+
+  ipcMain.handle("overlay:get-pets", () => {
+    return getOverlayPets();
+  });
+
+  ipcMain.handle("overlay:set-pets", (_, petIds: string[]) => {
+    return setOverlayPets(petIds);
+  });
+
+  // ===== Window Management =====
+
   ipcMain.on("window:close-overlay", () => closeOverlayWindow());
   ipcMain.on("window:show-overlay", () => showOverlay());
   ipcMain.on("window:hide-overlay", () => hideOverlay());
 
-  // Toggle overlay mode: minimize main window and show overlay
   ipcMain.on("window:enter-overlay-mode", () => {
-    console.log("[petmii] IPC: enter-overlay-mode received");
-    const main = getMainWindow();
-    if (main) {
-      main.minimize();
+    console.log("[petmii] IPC: toggle-overlay received, current:", isOverlayVisible());
+    if (isOverlayVisible()) {
+      hideOverlay();
+    } else {
+      showOverlay();
     }
-    // Call showOverlay directly — don't rely on the minimize event
-    showOverlay();
   });
 
-  // Exit overlay mode: hide overlay and restore main window
+  // Mouse event toggling for overlay (full-screen click-through)
+  ipcMain.on("overlay:set-interactive", (_, interactive: boolean) => {
+    const overlay = getOverlayWindow();
+    if (overlay && !overlay.isDestroyed()) {
+      if (interactive) {
+        overlay.setIgnoreMouseEvents(false);
+      } else {
+        overlay.setIgnoreMouseEvents(true, { forward: true });
+      }
+    }
+  });
+
   ipcMain.on("window:exit-overlay-mode", () => {
-    hideOverlay();
+    // Clicking a pet in overlay — restore main window focus but keep overlay
     restoreMainWindow();
   });
 
@@ -68,7 +135,8 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // Resource monitor: returns per-process CPU and memory metrics
+  // ===== System =====
+
   ipcMain.handle("system:get-metrics", () => {
     const metrics = app.getAppMetrics();
     const mainMemory = process.memoryUsage();
@@ -81,8 +149,8 @@ export function registerIpcHandlers(): void {
           percentCPUUsage: m.cpu.percentCPUUsage,
         },
         memory: {
-          workingSetSize: m.memory.workingSetSize, // KB
-          peakWorkingSetSize: m.memory.peakWorkingSetSize, // KB
+          workingSetSize: m.memory.workingSetSize,
+          peakWorkingSetSize: m.memory.peakWorkingSetSize,
         },
       })),
       mainProcess: {
@@ -94,23 +162,17 @@ export function registerIpcHandlers(): void {
     };
   });
 
-  // Overlay drag & drop with gravity
-  ipcMain.on("window:overlay-drag-start", (_, screenX, screenY) => {
-    startDrag(screenX, screenY);
+  // ===== Graveyard =====
+
+  ipcMain.handle("graveyard:load", () => {
+    const game = loadGameState();
+    return game.graveyard;
   });
 
-  ipcMain.on("window:overlay-drag-move", (_, screenX, screenY) => {
-    moveDrag(screenX, screenY);
-  });
-
-  ipcMain.on("window:overlay-drag-end", () => {
-    endDrag();
-  });
-
-  // Graveyard
-  ipcMain.handle("graveyard:load", () => loadGraveyard());
   ipcMain.handle("graveyard:remove", (_, id: string) => {
-    removeFromGraveyard(id);
+    const game = loadGameState();
+    game.graveyard = game.graveyard.filter(e => e.id !== id);
+    saveGameState(game);
     return true;
   });
 }

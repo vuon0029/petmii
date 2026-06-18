@@ -1,4 +1,4 @@
-/* Overlay Window Styles — Transparent, compact pet on taskbar */
+/* Overlay Window Styles — Full-width transparent, multi-pet */
 
 html,
 body {
@@ -6,24 +6,22 @@ body {
   padding: 0;
   background: transparent;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Silkscreen", monospace;
 }
 
 .overlay-container {
   width: 100vw;
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
   position: relative;
+  /* Pass clicks through to apps behind */
+  pointer-events: none;
 }
 
-/* Clickable pet area */
+/* Individual pet wrapper — captures clicks */
 .overlay-pet {
   cursor: pointer;
   pointer-events: auto;
-  position: relative;
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -35,51 +33,42 @@ body {
   filter: brightness(1.1);
 }
 
-/* Dragging state */
 .overlay-pet.dragging {
   cursor: grabbing;
   opacity: 0.85;
 }
 
-/* Flying — disable hover effects */
 .overlay-pet.physics-flying {
   cursor: default;
   pointer-events: none;
 }
 
-/* Landed on its back/side — stays rotated */
 .overlay-pet.physics-landed {
   cursor: default;
 }
 
-/* Getting up — smooth rotation transition back to 0 (handled inline) */
 .overlay-pet.physics-getting-up {
   cursor: default;
 }
 
-/* Minecraft-style nametag — hidden by default, shows on hover */
+/* Nametag — controlled by JS hover state */
 .overlay-nametag {
   display: flex;
   justify-content: center;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
+  margin-bottom: 2px;
 }
 
-.overlay-pet:hover .overlay-nametag {
+.overlay-nametag.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
 .overlay-nametag-text {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
   font-family: "Silkscreen", monospace;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 400;
   padding: 2px 8px;
   border-radius: 3px;
@@ -88,7 +77,7 @@ body {
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
 }
 
-/* Low stat alert icons — float just above the pet sprite */
+/* Low stat alert icons */
 .overlay-alerts {
   display: flex;
   gap: 2px;
@@ -106,9 +95,7 @@ body {
   50% { transform: translateY(-3px); }
 }
 
-/* Debuff notifications — removed for cleaner overlay */
-
-/* Speech bubble — absolutely positioned to the right, doesn't shift pet */
+/* Speech bubble — to the right */
 .overlay-speech {
   position: absolute;
   left: 100%;
@@ -138,4 +125,29 @@ body {
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   border-right: 5px solid rgba(255, 255, 255, 0.94);
+}
+
+/* Egg found notification "!" */
+.overlay-egg-found {
+  position: absolute;
+  top: -12px;
+  right: -4px;
+  background: #ff4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: egg-found-bounce 0.5s ease-in-out infinite;
+  box-shadow: 0 1px 3px rgba(255, 0, 0, 0.3);
+}
+
+@keyframes egg-found-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
 }

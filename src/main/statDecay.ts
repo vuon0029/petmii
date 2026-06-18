@@ -1,17 +1,21 @@
 // src/main/statDecay.ts
 // Stat decay engine — runs in the main process on a timer.
-// Handles passive decay, cross-stat effects, life stage progression, and death.
+// Handles passive decay, cross-stat effects, life stage progression, death, and egg discovery.
 
 import { BrowserWindow } from "electron";
-import { loadPetState, savePetState } from "./petStorage";
-import type { PetState, PetLifeStage, PetMood } from "../renderer/pet/petVariant";
+import { randomUUID } from "node:crypto";
+import { loadGameState, saveGameState, addEgg, removePet, EGG_HATCH_HOURS } from "./petStorage";
+import type { Egg, GameState } from "./petStorage";
+import type { PetState, PetLifeStage, PetMood, PetSpecies } from "../renderer/pet/petVariant";
 import { SPECIES_TRAITS } from "../renderer/pet/speciesTraits";
 import { PERSONALITY_TRAITS } from "../renderer/pet/personalityTraits";
-import { saveToGraveyard } from "./graveyard";
 import { hideOverlay, restoreMainWindow } from "./windowManager";
 
 // Decay tick interval (ms)
 const DECAY_TICK_MS = 60_000; // every 60 seconds
+
+// Egg discovery check interval
+const EGG_CHECK_INTERVAL_TICKS = 1; // TESTING: every tick (normal: 60)
 
 // Base decay rates (points per hour)
 const BASE_DECAY = {
@@ -23,8 +27,8 @@ const BASE_DECAY = {
 };
 
 // HP mechanics
-const HP_DAMAGE_RATE = 5; // HP lost per hour when hunger = 0
-const HP_RECOVERY_RATE = 2; // HP gained per hour when all stats are okay // HP gained per hour when all stats are okay
+const HP_DAMAGE_RATE = 5;
+const HP_RECOVERY_RATE = 2;
 
 // Life stage decay multipliers
 const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
@@ -34,14 +38,26 @@ const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
   adult: 0.8,
 };
 
+// Egg discovery config
+const EGG_DAILY_CHANCE = 0.15; // 15% per day
+const EGG_HOURLY_CHANCE = 0.90; // TESTING: 90% per check (normal: EGG_DAILY_CHANCE / 24)
+const HEALTHY_STAT_THRESHOLD = 10; // TESTING: very low threshold (normal: 60)
+const HEALTHY_HOURS_REQUIRED = 24;
+const MAX_EGGS = 3;
+const SHINY_EGG_CHANCE = 1 / 4000;
+const SAME_SPECIES_WEIGHT = 3; // 3x more likely to find same species egg
+
+const ALL_SPECIES: PetSpecies[] = ["mochi", "blob", "bun", "sprout", "ghost", "star"];
+
 let decayInterval: ReturnType<typeof setInterval> | null = null;
+let tickCount = 0;
 
 /**
  * Starts the decay timer. Should be called once on app ready.
- * Decay only runs while the app is open — no catch-up for offline time.
  */
 export function startDecayTimer(): void {
   stopDecayTimer();
+  tickCount = 0;
 
   decayInterval = setInterval(() => {
     tickDecay();
@@ -57,25 +73,177 @@ export function stopDecayTimer(): void {
 
 /**
  * Single decay tick — called every 60 seconds.
+ * Iterates over ALL pets in the game state.
  */
 function tickDecay(): void {
-  const pet = loadPetState();
-  if (!pet || !pet.isAlive) return;
+  const game = loadGameState();
+  if (game.pets.length === 0) return;
 
   const tickHours = DECAY_TICK_MS / (1000 * 60 * 60);
-  const updated = applyDecayForHours(pet, tickHours);
+  let anyDied = false;
+  const deaths: PetState[] = [];
 
-  savePetState(updated);
-  broadcastState(updated);
+  // Apply decay to each living pet
+  for (let i = 0; i < game.pets.length; i++) {
+    const pet = game.pets[i];
+    if (!pet.isAlive) continue;
 
-  if (!updated.isAlive) {
-    handleDeath(updated);
+    const updated = applyDecayForHours(pet, tickHours);
+    game.pets[i] = updated;
+
+    if (!updated.isAlive) {
+      anyDied = true;
+      deaths.push(updated);
+    }
+  }
+
+  // Handle deaths — remove dead pets, add to graveyard
+  for (const deadPet of deaths) {
+    game.pets = game.pets.filter(p => p.id !== deadPet.id);
+    game.settings.overlayPets = game.settings.overlayPets.filter(id => id !== deadPet.id);
+    game.graveyard.push({
+      id: deadPet.id,
+      name: deadPet.name,
+      species: deadPet.species,
+      color: deadPet.color,
+      personality: deadPet.personality,
+      isShiny: deadPet.isShiny,
+      hatchedAt: deadPet.hatchedAt,
+      diedAt: deadPet.diedAt || new Date().toISOString(),
+    });
+  }
+
+  // Egg discovery check (once per hour)
+  tickCount++;
+  if (tickCount >= EGG_CHECK_INTERVAL_TICKS) {
+    tickCount = 0;
+    checkEggDiscovery(game);
+  }
+
+  // Mercy egg: if 0 living pets and 0 eggs, spawn one
+  const livingPets = game.pets.filter(p => p.isAlive);
+  if (livingPets.length === 0 && game.eggs.length === 0) {
+    spawnMercyEgg(game);
+  }
+
+  saveGameState(game);
+  broadcastGameState(game);
+
+  if (anyDied) {
+    // If all pets are dead, show death screen
+    if (livingPets.length === 0) {
+      handleAllPetsDead(deaths[deaths.length - 1]);
+    } else {
+      // Notify about individual deaths
+      for (const dead of deaths) {
+        broadcastPetDeath(dead);
+      }
+    }
   }
 }
 
 /**
+ * Egg discovery — check once per hour for each healthy adult pet.
+ */
+function checkEggDiscovery(game: GameState): void {
+  if (game.eggs.length >= MAX_EGGS) return;
+
+  const livingPets = game.pets.filter(p => p.isAlive);
+  console.log("[petmii] Egg check: living pets =", livingPets.length, "eggs =", game.eggs.length);
+
+  for (const pet of livingPets) {
+    if (game.eggs.length >= MAX_EGGS) break;
+    const healthy = isPetHealthyForEgg(pet);
+    console.log("[petmii] Pet", pet.name, "healthy for egg:", healthy, "(bond:", pet.bond, ")");
+    if (!healthy) continue;
+
+    if (Math.random() < EGG_HOURLY_CHANCE) {
+      const egg = generateEgg(pet);
+      game.eggs.push(egg);
+      console.log("[petmii] Egg found!", egg.species, "by", pet.name);
+      broadcastEggFound(pet, egg);
+    }
+  }
+}
+
+/**
+ * Check if a pet is healthy enough to find eggs.
+ * All stats > 60, and pet is adult.
+ */
+function isPetHealthyForEgg(pet: PetState): boolean {
+  // TESTING: allow all stages (normal: only "adult")
+  if (pet.lifeStage !== "adult" && pet.lifeStage !== "child" && pet.lifeStage !== "baby") return false;
+  if (pet.hunger < HEALTHY_STAT_THRESHOLD) return false;
+  if (pet.happiness < HEALTHY_STAT_THRESHOLD) return false;
+  if (pet.energy < HEALTHY_STAT_THRESHOLD) return false;
+  if (pet.cleanliness < HEALTHY_STAT_THRESHOLD) return false;
+  if (pet.bond < HEALTHY_STAT_THRESHOLD) return false;
+  return true;
+}
+
+/**
+ * Generate an egg — species influenced by finder's species.
+ */
+function generateEgg(finder: PetState): Egg {
+  const species = rollEggSpecies(finder.species);
+  const now = new Date();
+  const hatchMs = EGG_HATCH_HOURS[species] * 60 * 60 * 1000;
+  const hatchAt = new Date(now.getTime() + hatchMs);
+
+  return {
+    id: randomUUID(),
+    species,
+    isShiny: Math.random() < SHINY_EGG_CHANCE,
+    foundAt: now.toISOString(),
+    hatchAt: hatchAt.toISOString(),
+    foundBy: finder.id,
+  };
+}
+
+/**
+ * Roll egg species — finder's species is weighted higher.
+ */
+function rollEggSpecies(finderSpecies: PetSpecies): PetSpecies {
+  const weights: { species: PetSpecies; weight: number }[] = ALL_SPECIES.map(s => ({
+    species: s,
+    weight: s === finderSpecies ? SAME_SPECIES_WEIGHT : 1,
+  }));
+
+  const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+  let roll = Math.random() * totalWeight;
+
+  for (const entry of weights) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.species;
+  }
+
+  return finderSpecies; // Fallback
+}
+
+/**
+ * Spawn a mercy egg when 0 pets alive and 0 eggs.
+ */
+function spawnMercyEgg(game: GameState): void {
+  const species = ALL_SPECIES[Math.floor(Math.random() * ALL_SPECIES.length)];
+  const now = new Date();
+  // Mercy eggs hatch in 1-5 minutes
+  const hatchMinutes = 1 + Math.random() * 4;
+  const hatchAt = new Date(now.getTime() + hatchMinutes * 60 * 1000);
+
+  const egg: Egg = {
+    id: randomUUID(),
+    species,
+    isShiny: Math.random() < SHINY_EGG_CHANCE,
+    foundAt: now.toISOString(),
+    hatchAt: hatchAt.toISOString(),
+    foundBy: "mercy",
+  };
+
+  game.eggs.push(egg);
+}
+
+/**
  * Core decay logic — applies decay for a given number of hours.
- * Handles cross-stat effects, species/personality modifiers, HP, life stages.
  */
 function applyDecayForHours(pet: PetState, hours: number): PetState {
   let state = { ...pet };
@@ -84,7 +252,6 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   const personalityTraits = PERSONALITY_TRAITS[state.personality];
   const stageMultiplier = STAGE_MULTIPLIERS[state.lifeStage];
 
-  // Calculate effective decay rates
   const effectiveDecay = {
     hunger: BASE_DECAY.hunger * speciesTraits.decay.hunger * personalityTraits.decayMultipliers.hunger * stageMultiplier,
     happiness: BASE_DECAY.happiness * speciesTraits.decay.happiness * personalityTraits.decayMultipliers.happiness * stageMultiplier,
@@ -93,20 +260,16 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
     bond: BASE_DECAY.bond * speciesTraits.decay.bond * personalityTraits.decayMultipliers.bond * stageMultiplier,
   };
 
-  // Cross-stat effects — cascading decay
-  // Hunger is the leading stat
+  // Cross-stat effects
   if (state.hunger <= 0) {
-    // Hunger at 0: energy and happiness decay much faster
     effectiveDecay.energy *= 3;
     effectiveDecay.happiness *= 3;
   } else if (state.hunger < 30) {
     effectiveDecay.happiness *= 2;
   }
 
-  // Cascade: multiple stats at 0 = catastrophic
   const zeroCount = [state.hunger, state.happiness, state.energy].filter((v) => v <= 0).length;
   if (zeroCount >= 2) {
-    // Two or more critical stats at 0: everything collapses
     effectiveDecay.hunger *= 2;
     effectiveDecay.happiness *= 2;
     effectiveDecay.energy *= 2;
@@ -124,7 +287,7 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   state.cleanliness = clamp(state.cleanliness - effectiveDecay.cleanliness * hours);
   state.bond = clamp(state.bond - effectiveDecay.bond * hours);
 
-  // HP mechanics — hunger/happiness/energy are the critical triangle
+  // HP mechanics
   const criticalStats = [
     state.hunger <= 0,
     state.happiness <= 0,
@@ -132,17 +295,13 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   ].filter(Boolean).length;
 
   if (criticalStats >= 3) {
-    // All three critical stats at 0: rapid death
     state.hp = clamp(state.hp - 60 * hours);
   } else if (criticalStats >= 2) {
-    // Two critical stats at 0: fast HP drain
     state.hp = clamp(state.hp - 25 * hours);
   } else if (state.hunger <= 0) {
-    // Only hunger at 0: steady HP drain
     state.hp = clamp(state.hp - HP_DAMAGE_RATE * hours);
   }
 
-  // Recovery: only if hunger > 30 and happiness > 20 and no stats at 0
   if (state.hunger > 30 && state.happiness > 20 && criticalStats === 0 && state.hp < 100) {
     state.hp = clamp(state.hp + HP_RECOVERY_RATE * hours);
   }
@@ -155,7 +314,6 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
     state.mood = "dead";
     state.lastMessage = "...";
   } else {
-    // Derive mood
     state.mood = deriveMoodFromStats(state);
     state.lastMessage = deriveMessageFromStats(state);
   }
@@ -167,16 +325,11 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   return state;
 }
 
-/**
- * Check if the pet should progress to the next life stage.
- */
 function checkLifeStageProgression(pet: PetState): PetState {
   if (!pet.isAlive) return pet;
 
   const speciesTraits = SPECIES_TRAITS[pet.species];
   const ageHours = (Date.now() - new Date(pet.hatchedAt).getTime()) / (1000 * 60 * 60);
-
-  // Must have minimum stats to evolve (hunger > 20)
   const canEvolve = pet.hunger > 20;
 
   if (pet.lifeStage === "baby" && ageHours >= speciesTraits.stages.babyToChild && canEvolve) {
@@ -190,9 +343,6 @@ function checkLifeStageProgression(pet: PetState): PetState {
   return pet;
 }
 
-/**
- * Mood derivation (duplicated here to avoid renderer imports in main process).
- */
 function deriveMoodFromStats(pet: PetState): PetMood {
   if (!pet.isAlive) return "dead";
   if (pet.hp < 40) return "sick";
@@ -221,8 +371,8 @@ function deriveMessageFromStats(pet: PetState): string {
   if (pet.hunger > 80 && pet.happiness > 60) return "Yummy~!";
   if (pet.energy > 80 && pet.happiness > 60) return "Let's go!";
 
-  // Random idle chatter (~15% chance per tick = ~1.5 messages per 10 min)
-  if (Math.random() < 0.90) {
+  // Random idle chatter — low chance per tick so pets don't all speak together
+  if (Math.random() < 0.05) { // TESTING: 5% per tick per pet (normal: 0.05)
     return randomFrom(IDLE_CHATTER);
   }
 
@@ -230,22 +380,8 @@ function deriveMessageFromStats(pet: PetState): string {
 }
 
 const IDLE_CHATTER = [
-  "♪",
-  "♪♪",
-  "...",
-  "Hmm~",
-  "Zzz...",
-  "!",
-  "~",
-  "Hehe",
-  "*yawn*",
-  "La la la~",
-  "○○○",
-  "?",
-  "*stretch*",
-  "Nom",
-  "*wiggle*",
-  "^^",
+  "♪", "♪♪", "...", "Hmm~", "Zzz...", "!", "~", "Hehe",
+  "*yawn*", "La la la~", "○○○", "?", "*stretch*", "Nom", "*wiggle*", "^^",
 ];
 
 function randomFrom<T>(arr: T[]): T {
@@ -257,16 +393,23 @@ function clamp(value: number, min = 0, max = 100): number {
 }
 
 /**
- * Handles pet death — save to graveyard and notify renderer.
+ * Handles the case when all pets die — show death screen.
  */
-function handleDeath(pet: PetState): void {
-  saveToGraveyard(pet);
-
-  // Close overlay and restore main window
+function handleAllPetsDead(lastDead: PetState): void {
   hideOverlay();
   restoreMainWindow();
 
-  // Notify all windows about death
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("pet:all-died", lastDead);
+    }
+  }
+}
+
+/**
+ * Broadcast individual pet death (when other pets still alive).
+ */
+function broadcastPetDeath(pet: PetState): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
       win.webContents.send("pet:died", pet);
@@ -275,12 +418,23 @@ function handleDeath(pet: PetState): void {
 }
 
 /**
- * Broadcasts updated pet state to all open windows.
+ * Broadcasts updated game state to all open windows.
  */
-function broadcastState(pet: PetState): void {
+function broadcastGameState(game: GameState): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
-      win.webContents.send("pet:state-update", pet);
+      win.webContents.send("game:state-update", game);
+    }
+  }
+}
+
+/**
+ * Broadcast egg found notification.
+ */
+function broadcastEggFound(finder: PetState, egg: Egg): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send("egg:found", { finder, egg });
     }
   }
 }
