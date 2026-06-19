@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
   // Overlay settings
   getOverlayPets: () => ipcRenderer.invoke("overlay:get-pets"),
   setOverlayPets: (petIds: string[]) => ipcRenderer.invoke("overlay:set-pets", petIds),
+  isOverlayVisible: () => ipcRenderer.invoke("overlay:is-visible"),
 
   // Window management
   closeOverlay: () => ipcRenderer.send("window:close-overlay"),

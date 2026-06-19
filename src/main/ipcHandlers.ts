@@ -85,6 +85,10 @@ export function registerIpcHandlers(): void {
     return getOverlayPets();
   });
 
+  ipcMain.handle("overlay:is-visible", () => {
+    return isOverlayVisible();
+  });
+
   ipcMain.handle("overlay:set-pets", (_, petIds: string[]) => {
     return setOverlayPets(petIds);
   });

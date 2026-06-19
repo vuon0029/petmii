@@ -5,6 +5,10 @@ import {
   closeOverlayWindow,
   createMainWindow,
   getMainWindow,
+  restoreMainWindow,
+  showOverlay,
+  hideOverlay,
+  isOverlayVisible,
 } from "./windowManager";
 import { startDecayTimer } from "./statDecay";
 
@@ -67,18 +71,21 @@ function createTray(): void {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Show petmii",
+      label: "Open petmii",
       click: () => {
         if (isQuitting) return;
-
-        const main = getMainWindow();
-
-        if (!main || main.isDestroyed()) {
-          return;
+        restoreMainWindow();
+      },
+    },
+    {
+      label: "Toggle Overlay",
+      click: () => {
+        if (isQuitting) return;
+        if (isOverlayVisible()) {
+          hideOverlay();
+        } else {
+          showOverlay();
         }
-
-        main.show();
-        main.focus();
       },
     },
     { type: "separator" },
@@ -94,19 +101,7 @@ function createTray(): void {
   // Click tray icon to show/hide main window
   tray.on("click", () => {
     if (isQuitting) return;
-
-    const main = getMainWindow();
-
-    if (!main || main.isDestroyed()) {
-      return;
-    }
-
-    if (main.isVisible()) {
-      main.hide();
-    } else {
-      main.show();
-      main.focus();
-    }
+    restoreMainWindow();
   });
 }
 

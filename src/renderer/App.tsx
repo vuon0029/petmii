@@ -35,10 +35,14 @@ export function App() {
       const loaded = await window.petmiiAPI.loadGame();
       setGame(loaded);
 
+      // Sync overlay toggle with actual state
+      const overlayVisible = await window.petmiiAPI.isOverlayVisible();
+      setOverlayOn(overlayVisible);
+
       if (loaded.pets.length > 0) {
         setView("pets");
       } else if (loaded.eggs.length > 0) {
-        setView("pets"); // show egg list
+        setView("pets");
       } else {
         setView("egg-ready");
       }

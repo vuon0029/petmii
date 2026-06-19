@@ -76,6 +76,7 @@ declare global {
       // Overlay settings
       getOverlayPets(): Promise<string[]>;
       setOverlayPets(petIds: string[]): Promise<boolean>;
+      isOverlayVisible(): Promise<boolean>;
 
       // Window management
       closeOverlay(): void;

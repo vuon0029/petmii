@@ -18,7 +18,7 @@ let overlayVisible = false;
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 500,
-    height: 500,
+    height: 780,
     title: "petmii",
     icon: APP_ICON,
     resizable: true,
@@ -61,12 +61,13 @@ export function createMainWindow(): BrowserWindow {
     // No auto-hide on restore — overlay is manual toggle only
   });
 
-  // Hide to tray instead of quitting when user clicks X
+  // Destroy main window to free memory when user closes (tray keeps app alive)
   mainWindow.on("close", (e) => {
     const { app } = require("electron");
     if (!(app as { isQuitting?: boolean }).isQuitting) {
       e.preventDefault();
-      mainWindow?.hide();
+      mainWindow?.destroy();
+      mainWindow = null;
     }
   });
 
@@ -194,7 +195,9 @@ export function closeOverlayWindow(): void {
 }
 
 export function restoreMainWindow(): void {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow();
+  } else {
     mainWindow.show();
     mainWindow.restore();
     mainWindow.focus();
