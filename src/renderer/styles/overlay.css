@@ -20,6 +20,25 @@ body {
 
 /* Individual pet wrapper — captures clicks */
 .overlay-pet {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.overlay-pet-body {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 48px;
+  height: 48px;
+  transform: scale(1.5);
+  transform-origin: bottom left;
+
+  cursor: pointer;
+}
+/* .overlay-pet {
   cursor: pointer;
   pointer-events: auto;
   position: absolute;
@@ -29,13 +48,13 @@ body {
 
   overflow: visible;
   transform-origin: center center;
-}
+} */
 
 .overlay-pet:hover {
   filter: brightness(1.2);
 }
 
-.overlay-pet.dragging {
+.overlay-pet-body.dragging {
   cursor: grabbing;
   opacity: 0.85;
 }
@@ -119,15 +138,18 @@ body {
 .overlay-speech {
   position: absolute;
   left: 100%;
-  top: 30%;
+  top: 35%;
   transform: translateY(-50%);
   margin-left: 6px;
+
   display: flex;
   align-items: center;
+
   background: rgba(255, 255, 255, 0.94);
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 0.7rem;
+  line-height: 1.2;
   color: #444;
   white-space: normal;
   max-width: 100px;
@@ -135,11 +157,13 @@ body {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 
-.overlay-speech-arrow {
+.overlay-speech::before {
+  content: "";
   position: absolute;
   left: -5px;
-  top: 30%;
+  top: 50%;
   transform: translateY(-50%);
+
   width: 0;
   height: 0;
   border-top: 5px solid transparent;

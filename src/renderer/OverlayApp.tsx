@@ -5,6 +5,11 @@ import type { GameState } from "./types";
 import "./styles/overlay.css";
 import "./styles/pet-avatar.css";
 
+const PET_BASE_SIZE = 48;
+const PET_SCALE = 1.5;
+const PET_RENDER_SIZE = PET_BASE_SIZE * PET_SCALE; // 72
+const GROUND_OFFSET_PX = 0;
+
 const LOW_STAT_THRESHOLD = 50;
 const SPEECH_DISPLAY_MS = 8000;
 
@@ -22,8 +27,6 @@ const DRAG_HISTORY_SIZE = 5;
 const ANGULAR_VEL_FACTOR = 0.03;
 const ANGULAR_DAMPING = 0.95;
 const WALL_PADDING = 4;
-
-const PET_WIDTH = 48;
 
 interface PetOverlayState {
   id: string;
@@ -64,6 +67,26 @@ export function OverlayApp() {
     started: boolean;
     history: { x: number; y: number; t: number }[];
   }>({ petId: null, startTime: 0, started: false, history: [] });
+
+  function getContainerHeight() {
+    return containerRef.current?.clientHeight || window.innerHeight;
+  }
+
+  function getGroundY() {
+    return getContainerHeight() - PET_RENDER_SIZE - GROUND_OFFSET_PX;
+  }
+
+  function getMaxX() {
+    return Math.max(0, containerWidth - PET_RENDER_SIZE);
+  }
+
+  function clampX(x: number) {
+    return clamp(x, 0, getMaxX());
+  }
+
+  function clampY(y: number) {
+    return clamp(y, 0, getGroundY());
+  }
 
   // Initialize pets from game state
   useEffect(() => {
@@ -197,8 +220,9 @@ export function OverlayApp() {
             vx = -vx * WALL_BOUNCE_DAMPING;
             angularVel *= -0.5;
           }
-          if (x >= containerWidth - PET_WIDTH) {
-            x = containerWidth - PET_WIDTH;
+
+          if (x >= getMaxX()) {
+            x = getMaxX();
             vx = -vx * WALL_BOUNCE_DAMPING;
             angularVel *= -0.5;
           }
@@ -210,15 +234,15 @@ export function OverlayApp() {
           }
 
           // Ground (y >= 0 means at bottom of container - pet height - padding)
-          const groundY =
-            (containerRef.current?.clientHeight || 100) - PET_WIDTH;
+          const groundY = getGroundY();
+
           if (y >= groundY) {
             y = groundY;
+
             if (Math.abs(vy) < 2 && Math.abs(vx) < 1) {
-              // Settled
               return {
                 ...p,
-                x,
+                x: clampX(x),
                 y: groundY,
                 vx: 0,
                 vy: 0,
@@ -228,6 +252,7 @@ export function OverlayApp() {
                 isLanded: true,
               };
             }
+
             vy = -vy * BOUNCE_DAMPING;
             vx *= 0.85;
             angularVel *= 0.5;
@@ -291,12 +316,10 @@ export function OverlayApp() {
 
         if (Math.random() < PAUSE_CHANCE) return p;
 
-        const containerHeight = containerRef.current?.clientHeight || 120;
-        const maxX = Math.max(0, containerWidth - PET_WIDTH);
+        const maxX = Math.max(0, containerWidth - PET_RENDER_SIZE);
         const minX = 0;
 
-        const groundY = containerHeight - PET_WIDTH;
-
+        const groundY = getGroundY();
         const currentX = clamp(p.x, minX, maxX);
 
         const atLeftWall = currentX <= minX + WALL_PADDING;
@@ -423,10 +446,19 @@ export function OverlayApp() {
       // Move pet to cursor
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
-        const x = e.clientX - rect.left - 24;
-        const y = e.clientY - rect.top - 24;
+        const x = e.clientX - rect.left - PET_RENDER_SIZE / 2;
+        const y = e.clientY - rect.top - PET_RENDER_SIZE / 2;
+
         setPets((prev) =>
-          prev.map((p) => (p.id === ds.petId ? { ...p, x, y } : p)),
+          prev.map((p) =>
+            p.id === ds.petId
+              ? {
+                  ...p,
+                  x: clampX(x),
+                  y: clampY(y),
+                }
+              : p,
+          ),
         );
       }
 
@@ -465,6 +497,8 @@ export function OverlayApp() {
           p.id === ds.petId
             ? {
                 ...p,
+                x: clampX(p.x),
+                y: clampY(p.y),
                 isDragging: false,
                 isFlying: true,
                 vx,
@@ -544,24 +578,25 @@ export function OverlayApp() {
           }
 
           {/* Pet sprite */}
-          <div
-            style={{
-              transform:
-                p.direction === -1 && !p.isFlying ? "scaleX(-1)" : undefined,
-            }}
-          >
-            <PetAvatar
-              species={p.pet.species}
-              color={p.pet.color}
-              personality={p.pet.personality}
-              lifeStage={p.pet.lifeStage}
-            />
+          <div className="overlay-pet-body">
+            <div
+              style={{
+                transform:
+                  p.direction === -1 && !p.isFlying ? "scaleX(-1)" : undefined,
+              }}
+            >
+              <PetAvatar
+                species={p.pet.species}
+                color={p.pet.color}
+                personality={p.pet.personality}
+                lifeStage={p.pet.lifeStage}
+              />
+            </div>
           </div>
 
           {/* Speech bubble */}
           {p.message && !p.isFlying && !p.isLanded && (
             <div className="overlay-speech">
-              <div className="overlay-speech-arrow"></div>
               <span>{p.message}</span>
             </div>
           )}
@@ -601,11 +636,12 @@ function LowStatAlerts({
 }
 
 function createPetState(pet: PetState, screenWidth: number): PetOverlayState {
-  const groundY = window.innerHeight - PET_WIDTH;
+  const groundY = window.innerHeight - PET_RENDER_SIZE - GROUND_OFFSET_PX;
+
   return {
     id: pet.id,
     pet,
-    x: Math.random() * (screenWidth - PET_WIDTH),
+    x: Math.random() * Math.max(0, screenWidth - PET_RENDER_SIZE),
     y: groundY,
     vx: 0,
     vy: 0,
