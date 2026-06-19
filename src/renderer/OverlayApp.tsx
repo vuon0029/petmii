@@ -22,7 +22,6 @@ const HOP_DURATION_MS = 500;
 const PAUSE_CHANCE = 0.6;
 const BOUNCE_DAMPING = 0.2;
 const WALL_BOUNCE_DAMPING = 0.2;
-const DRAG_THRESHOLD_MS = 300;
 const DRAG_HISTORY_SIZE = 5;
 const ANGULAR_VEL_FACTOR = 0.03;
 const ANGULAR_DAMPING = 0.95;
@@ -407,47 +406,38 @@ export function OverlayApp() {
   const handleMouseDown = useCallback(
     (petId: string, e: React.MouseEvent) => {
       e.preventDefault();
-      // If pet has egg notification, clicking it goes to main view (to see eggs)
+      // If pet has egg notification, dismiss it
       const pet = pets.find((p) => p.id === petId);
       if (pet?.hasFoundEgg) {
         setPets((prev) =>
           prev.map((p) => (p.id === petId ? { ...p, hasFoundEgg: false } : p)),
         );
-        window.petmiiAPI.exitOverlayMode();
-        return;
       }
+      // Start drag immediately — no click/drag threshold
       dragState.current = {
         petId,
         startTime: Date.now(),
-        started: false,
+        started: true,
         history: [{ x: e.clientX, y: e.clientY, t: Date.now() }],
       };
+      setPets((prev) =>
+        prev.map((p) =>
+          p.id === petId ? { ...p, isDragging: true, isHopping: false } : p,
+        ),
+      );
     },
     [pets],
   );
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const ds = dragState.current;
-    if (!ds.petId) return;
+    if (!ds.petId || !ds.started) return;
 
-    const elapsed = Date.now() - ds.startTime;
-    if (elapsed >= DRAG_THRESHOLD_MS) {
-      if (!ds.started) {
-        ds.started = true;
-        setPets((prev) =>
-          prev.map((p) =>
-            p.id === ds.petId
-              ? { ...p, isDragging: true, isHopping: false }
-              : p,
-          ),
-        );
-      }
-
-      // Move pet to cursor
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        const x = e.clientX - rect.left - PET_RENDER_SIZE / 2;
-        const y = e.clientY - rect.top - PET_RENDER_SIZE / 2;
+    // Move pet to cursor
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = e.clientX - rect.left - PET_RENDER_SIZE / 2;
+      const y = e.clientY - rect.top - PET_RENDER_SIZE / 2;
 
         setPets((prev) =>
           prev.map((p) =>
@@ -464,7 +454,6 @@ export function OverlayApp() {
 
       ds.history.push({ x: e.clientX, y: e.clientY, t: Date.now() });
       if (ds.history.length > DRAG_HISTORY_SIZE) ds.history.shift();
-    }
   }, []);
 
   const handleMouseUp = useCallback(() => {
@@ -508,10 +497,7 @@ export function OverlayApp() {
             : p,
         ),
       );
-    } else {
-      // Short click — exit overlay
-      window.petmiiAPI.exitOverlayMode();
-    }
+    } 
 
     dragState.current = {
       petId: null,
