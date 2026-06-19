@@ -17,7 +17,7 @@ interface PetAvatarProps {
 }
 
 function getSpriteSrc(
-  species: string,
+  species: PetSpecies,
   color: string,
   lifeStage: PetLifeStage,
 ): string | undefined {

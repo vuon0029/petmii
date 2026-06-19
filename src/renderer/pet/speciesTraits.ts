@@ -31,7 +31,7 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
       cleanliness: 1.0,
       bond: 1.0,
     },
-    stages: { babyToChild: 0.01, childToAdult: 0.01 },
+    stages: { babyToChild: 0.01, childToAdult: 0.01 }, //TESTING
     description: "Always hungry, but chill energy",
   },
   star: {
@@ -45,7 +45,7 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
     stages: { babyToChild: 24, childToAdult: 72 },
     description: "Perfectly balanced, no weakness",
   },
-  mochi: {
+  frog: {
     decay: {
       hunger: 1.0,
       happiness: 0.8,
@@ -53,7 +53,7 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
       cleanliness: 1.2,
       bond: 1.0,
     },
-    stages: { babyToChild: 20, childToAdult: 60 },
+    stages: { babyToChild: 0.01, childToAdult: 0.01 }, //TESTING
     description: "Balanced, gets dirty easily",
   },
 };

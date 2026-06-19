@@ -3,7 +3,7 @@
 
 import { PetSpecies, PetColor, PetPersonality, PetVariant } from "./petVariant";
 
-export const SPECIES: PetSpecies[] = ["blob", "star", "mochi"];
+export const SPECIES: PetSpecies[] = ["blob", "star", "frog"];
 export const COLORS: PetColor[] = ["yellow", "blue", "pink"];
 export const PERSONALITIES: PetPersonality[] = [
   "sweet",

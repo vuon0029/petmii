@@ -49,7 +49,7 @@ const MAX_EGGS = 3;
 const SHINY_EGG_CHANCE = 1 / 100;
 const SAME_SPECIES_WEIGHT = 2; // 2x more likely to find same species egg
 
-const ALL_SPECIES: PetSpecies[] = ["blob", "star", "mochi"];
+const ALL_SPECIES: PetSpecies[] = ["blob", "star", "frog"];
 
 let decayInterval: ReturnType<typeof setInterval> | null = null;
 let tickCount = 0;

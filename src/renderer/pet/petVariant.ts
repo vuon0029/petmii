@@ -1,7 +1,7 @@
 // src/renderer/pet/petVariant.ts
 // Type definitions and constants for pet variants, state, and defaults.
 
-export type PetSpecies = "blob" | "star" | "mochi";
+export type PetSpecies = "blob" | "star" | "frog";
 export type PetColor = "yellow" | "blue" | "pink" | "shiny";
 export type PetPersonality =
   | "sweet"
@@ -87,5 +87,5 @@ export const DEFAULT_PET_STATS = {
 export const SPECIES_DEFAULT_NAMES: Record<PetSpecies, string> = {
   blob: "Bob",
   star: "Striker",
-  mochi: "Dumdum",
+  frog: "Ribbon",
 };

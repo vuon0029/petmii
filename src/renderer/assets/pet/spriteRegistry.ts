@@ -1,6 +1,6 @@
 // Sprite registry — maps species/color/mood to statically imported sprite URLs.
 // Colors: yellow, blue, pink, shiny
-// Species: blob, star, mochi
+// Species: blob, star, frog
 
 // blob sprites
 import blobBlueIdle from "./blob/blue/idle.png";
@@ -15,6 +15,12 @@ import blobYellowAdult from "./blob/yellow/adult.png";
 import blobShinyIdle from "./blob/shiny/idle.png";
 import blobShinyAdult from "./blob/shiny/adult.png";
 
+//frog sprites
+import babyYellowFrogIdle from "./frog/yellow/idle.png";
+import babyBlueFrogIdle from "./frog/blue/idle.png";
+import babyPinkFrogIdle from "./frog/pink/idle.png";
+import babyShinyFrogIdle from "./frog/shiny/idle.png";
+
 // Lookup: sprites[species][color][mood] = url
 export const sprites: Record<string, Record<string, Record<string, string>>> = {
   blob: {
@@ -27,5 +33,18 @@ export const sprites: Record<string, Record<string, Record<string, string>>> = {
     },
     shiny: { baby: blobShinyIdle, child: blobShinyIdle, adult: blobShinyAdult },
   },
-  // star and mochi will be added when sprites are created
+  frog: {
+    blue: { baby: babyBlueFrogIdle, child: blobBlueIdle, adult: blobBlueAdult },
+    pink: { baby: babyPinkFrogIdle, child: blobPinkIdle, adult: blobPinkAdult },
+    yellow: {
+      baby: babyYellowFrogIdle,
+      child: blobYellowIdle,
+      adult: blobYellowAdult,
+    },
+    shiny: {
+      baby: babyShinyFrogIdle,
+      child: blobShinyIdle,
+      adult: blobShinyAdult,
+    },
+  },
 };

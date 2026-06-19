@@ -52,14 +52,14 @@ const MAX_PETS = 6;
 const MAX_EGGS = 3;
 const MAX_OVERLAY_PETS = 4;
 
-// (normal: blob:6, star:12, mochi:4)
+// (normal: blob:6, star:12, frog:4)
 export const EGG_HATCH_HOURS: Record<PetSpecies, number> = {
   blob: 0.5,
   star: 1,
-  mochi: 0.7,
+  frog: 0.7,
 };
 
-const VALID_SPECIES: PetSpecies[] = ["blob", "star", "mochi"];
+const VALID_SPECIES: PetSpecies[] = ["blob", "star", "frog"];
 const VALID_COLORS: PetColor[] = ["yellow", "blue", "pink", "shiny"];
 const VALID_PERSONALITIES: PetPersonality[] = [
   "sweet",
