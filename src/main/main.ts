@@ -51,8 +51,17 @@ function quitApp(): void {
   app.exit(0);
 }
 
+function getTrayIconPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "icon.ico");
+  }
+
+  return path.join(process.cwd(), "build", "icon.ico");
+}
+
 function createTray(): void {
-  const iconPath = path.join(__dirname, "../../build/icon.ico");
+  const iconPath = getTrayIconPath();
+
   const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
 

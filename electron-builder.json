@@ -4,8 +4,12 @@
   "directories": {
     "output": "release"
   },
-  "files": [
-    "out/**/*"
+  "files": ["out/**/*"],
+  "extraResources": [
+    {
+      "from": "build/icon.ico",
+      "to": "icon.ico"
+    }
   ],
   "win": {
     "target": "nsis",
