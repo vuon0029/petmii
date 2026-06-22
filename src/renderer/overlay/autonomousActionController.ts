@@ -50,10 +50,10 @@ export const PLAY_TOGETHER_COOLDOWN_MS = TEST_MODE ? TEST_PLAY_TOGETHER_COOLDOWN
 export const PLAY_TOGETHER_TRIGGER_RADIUS_PX = 150;
 
 /** Minimum spacing between pets during playTogether (px) */
-export const PLAY_TOGETHER_MIN_SPACING_PX = 30;
+export const PLAY_TOGETHER_MIN_SPACING_PX = 50;
 
 /** Maximum spacing between pets during playTogether (px) */
-export const PLAY_TOGETHER_MAX_SPACING_PX = 60;
+export const PLAY_TOGETHER_MAX_SPACING_PX = 80;
 
 /** Pool of playful icons used during playTogether sessions */
 export const PLAY_TOGETHER_ICONS = ["💫", "⚽", "🎾", "🧶", "🪀", "🧸", "🪁", "✨"];

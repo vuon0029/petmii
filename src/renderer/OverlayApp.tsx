@@ -1444,9 +1444,9 @@ export function OverlayApp() {
             </div>
           )}
 
-          {/* playTogether sparkle indicator */}
+          {/* playTogether sparkle indicator — positioned on the inner side (between pets) */}
           {p.currentAction === "playTogether" && p.physicsState !== "flying" && playTogetherIcon && (
-            <div className="overlay-play-together-indicator">{playTogetherIcon}</div>
+            <div className={`overlay-play-together-indicator ${p.direction === 1 ? "indicator-right" : "indicator-left"}`}>{playTogetherIcon}</div>
           )}
         </div>
         );

@@ -240,16 +240,53 @@ body {
   transform: translate(-50%, -50%);
 }
 
-/* playTogether per-pet sparkle indicator */
+/* playTogether per-pet sparkle indicator — positioned on the inner side */
 .overlay-play-together-indicator {
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 2px);
-  transform: translateX(-50%);
-  font-size: 1rem;
+  top: 25%;
+  font-size: 0.75rem;
   pointer-events: none;
-  animation: sparkle-pulse 1.5s ease-in-out infinite;
   z-index: 10;
+}
+
+/* Icon on the right side of the pet (inner side for left pet facing right) */
+.overlay-play-together-indicator.indicator-right {
+  left: calc(100% + 2px);
+  right: auto;
+  animation: sparkle-pulse-a 1.3s ease-in-out infinite;
+}
+
+/* Icon on the left side of the pet (inner side for right pet facing left) */
+.overlay-play-together-indicator.indicator-left {
+  right: calc(100% + 2px);
+  left: auto;
+  animation: sparkle-pulse-b 1.7s ease-in-out 0.4s infinite;
+}
+
+@keyframes sparkle-pulse-a {
+  0%, 100% {
+    opacity: 0.65;
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25) translateY(-2px);
+  }
+}
+
+@keyframes sparkle-pulse-b {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1) translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2) translateY(-1px);
+  }
+  70% {
+    opacity: 0.9;
+    transform: scale(1.1) translateY(1px);
+  }
 }
 
 @keyframes sparkle-pulse {
