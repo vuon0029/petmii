@@ -8,7 +8,7 @@ import { loadGameState, saveGameState } from "./petStorage";
 import { getEvolutionReadiness } from "../shared/pet/evolutionReadiness";
 import { calculateAdultTrait } from "../shared/pet/traitScoring";
 import { ensureCareHistory } from "../shared/pet/careHistory";
-import { getMainWindow, getOverlayWindow } from "./windowManager";
+import { getMainWindow, getOverlayWindow, isOverlayVisible } from "./windowManager";
 
 interface ActiveEvolutionSession {
   petId: string;
@@ -24,6 +24,7 @@ export function registerEvolutionHandlers(): void {
   // ===== evolve:start — one-way from renderer (main view) =====
   ipcMain.on("evolve:start", (_event, data: { petId: string; sessionId: string }) => {
     const { petId, sessionId } = data;
+    console.log("[petmii] evolve:start received for petId:", petId);
 
     // Load latest game state from disk
     const game = loadGameState();
@@ -31,6 +32,7 @@ export function registerEvolutionHandlers(): void {
 
     if (!pet) {
       // Pet not found — send rejection
+      console.log("[petmii] evolve:start REJECTED — pet not found");
       const mainWin = getMainWindow();
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send("evolve:rejected", { petId, sessionId });
@@ -45,8 +47,11 @@ export function registerEvolutionHandlers(): void {
       hatchedAt: Date.parse(pet.hatchedAt),
     });
 
+    console.log("[petmii] evolve:start readiness:", JSON.stringify(readiness), "lifeStage:", pet.lifeStage, "species:", pet.species, "hatchedAt:", pet.hatchedAt);
+
     if (!readiness.isReady) {
       // Not ready — send rejection to main view
+      console.log("[petmii] evolve:start REJECTED — not ready, remainingHours:", readiness.remainingHours);
       const mainWin = getMainWindow();
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send("evolve:rejected", { petId, sessionId });
@@ -77,17 +82,28 @@ export function registerEvolutionHandlers(): void {
       committed: false,
     });
 
-    // Forward to overlay window
+    // Forward to overlay window for animation, or commit immediately if no overlay
     const overlay = getOverlayWindow();
-    if (overlay && !overlay.isDestroyed()) {
+    if (overlay && !overlay.isDestroyed() && isOverlayVisible()) {
       overlay.webContents.send("evolve:start", { petId, sessionId, targetStage });
+    } else {
+      // No overlay active — commit evolution immediately (skip animation)
+      commitEvolution(sessionId);
     }
   });
 
   // ===== evolve:midpoint — one-way from overlay =====
   ipcMain.on("evolve:midpoint", (_event, data: { petId: string; sessionId: string }) => {
     const { sessionId } = data;
+    commitEvolution(sessionId);
+  });
+}
 
+/**
+ * Commits an evolution session — advances life stage, assigns adult trait if applicable,
+ * persists game state, and broadcasts results.
+ */
+function commitEvolution(sessionId: string): void {
     // Look up session
     const session = activeSessions.get(sessionId);
     if (!session || session.committed) {
@@ -140,5 +156,4 @@ export function registerEvolutionHandlers(): void {
         adultTrait: pet.adultTrait || null,
       });
     }
-  });
 }

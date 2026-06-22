@@ -84,14 +84,26 @@ export function App() {
     });
 
     window.petmiiAPI.onAutonomousActionStarted((data) => {
-      if (game?.pets[selectedPetIndex]?.id === data.petId) {
-        setIsAutonomousActionActive(true);
-      }
+      setGame((currentGame) => {
+        setSelectedPetIndex((idx) => {
+          if (currentGame?.pets[idx]?.id === data.petId) {
+            setIsAutonomousActionActive(true);
+          }
+          return idx;
+        });
+        return currentGame;
+      });
     });
     window.petmiiAPI.onAutonomousActionEnded((data) => {
-      if (game?.pets[selectedPetIndex]?.id === data.petId) {
-        setIsAutonomousActionActive(false);
-      }
+      setGame((currentGame) => {
+        setSelectedPetIndex((idx) => {
+          if (currentGame?.pets[idx]?.id === data.petId) {
+            setIsAutonomousActionActive(false);
+          }
+          return idx;
+        });
+        return currentGame;
+      });
     });
 
     window.petmiiAPI.onEvolveComplete((data) => {
@@ -159,10 +171,12 @@ export function App() {
 
     try {
       await window.petmiiAPI.addPet(newPet);
-      // If overlay is on, add the new pet to overlay pets list
+      // If overlay is on, ensure the new pet is in overlay pets list
       if (overlayOn) {
         const currentOverlayPets = await window.petmiiAPI.getOverlayPets();
-        await window.petmiiAPI.setOverlayPets([...currentOverlayPets, newPet.id]);
+        if (!currentOverlayPets.includes(newPet.id)) {
+          await window.petmiiAPI.setOverlayPets([...currentOverlayPets, newPet.id]);
+        }
       }
       const fresh = await window.petmiiAPI.loadGame();
       setGame(fresh);
@@ -181,7 +195,7 @@ export function App() {
     setPendingPet({
       variant: {
         species: egg.species,
-        color: generated.variant.color,
+        color: egg.isShiny ? "shiny" : generated.variant.color,
         personality: generated.variant.personality,
         lifeStage: "baby",
       },
@@ -468,19 +482,22 @@ export function App() {
                     disabled={overlayOn}
                     onChange={async () => {
                       if (overlayOn) return;
+                      // Deduplicate and filter to only IDs present in game.pets
+                      const gamePetIds = new Set(game.pets.map(pet => pet.id));
+                      const activeOverlayPets = [...new Set(game.settings.overlayPets)].filter(id => gamePetIds.has(id));
                       let newIds: string[];
                       if (isInOverlay) {
-                        newIds = game.settings.overlayPets.filter(
+                        newIds = activeOverlayPets.filter(
                           (id) => id !== p.id,
                         );
                       } else {
-                        if (game.settings.overlayPets.length >= 4) {
+                        if (activeOverlayPets.length >= 4) {
                           window.alert(
                             "Maximum 4 pets can be shown in overlay mode.",
                           );
                           return;
                         }
-                        newIds = [...game.settings.overlayPets, p.id];
+                        newIds = [...activeOverlayPets, p.id];
                       }
                       await window.petmiiAPI.setOverlayPets(newIds);
                       const fresh = await window.petmiiAPI.loadGame();
