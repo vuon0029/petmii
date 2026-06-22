@@ -16,6 +16,7 @@ import { computeEvolutionStyles, isMidpoint, EVOLUTION_DURATION_MS } from "./ove
 import type { EvolutionAnimationState } from "./overlay/evolutionAnimation";
 import { THROW_SPEED_THRESHOLD } from "../shared/pet/careConstants";
 import type { LifecycleState } from "../shared/pet/careHistory";
+import { PetNamecard } from "./components/PetNamecard";
 import "./styles/overlay.css";
 import "./styles/pet-avatar.css";
 
@@ -1394,10 +1395,12 @@ export function OverlayApp() {
             );
           }}
         >
-          {/* Nametag */}
-          <div className={`overlay-nametag ${p.isHovered ? "visible" : ""}`}>
-            <span className="overlay-nametag-text">{p.pet.name}</span>
-          </div>
+          {/* Namecard */}
+          <PetNamecard
+            pet={p.pet}
+            isHovered={p.isHovered}
+            physicsState={p.physicsState}
+          />
 
           {/* Egg found notification */}
           {p.physicsState !== "flying" && p.physicsState !== "landed" && p.hasFoundEgg && (
