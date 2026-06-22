@@ -124,7 +124,12 @@ function tick(
   const totalActiveTime = duration + landingPauseMs;
 
   setTimeout(() => {
-    dispatchAction("idle");
+    // Only reset to idle if the pet is still performing this specific action.
+    // If the pet has transitioned to autonomousRest, rest, playTogether, or
+    // approachCursor in the meantime, this stale timeout should be a no-op.
+    if (getCurrentAction() === action) {
+      dispatchAction("idle");
+    }
   }, totalActiveTime);
 }
 

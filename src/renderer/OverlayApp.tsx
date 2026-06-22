@@ -370,6 +370,10 @@ export function OverlayApp() {
             const pet = petsRef.current.find(p => p.id === petId);
             if (pet?.lifecycleState === "evolving") return;
 
+            // Skip dispatching if pet is in a non-ambient action (rest, autonomousRest, playTogether, approachCursor)
+            const nonAmbientActions: ActionName[] = ["rest", "autonomousRest", "playTogether", "approachCursor"];
+            if (pet && nonAmbientActions.includes(pet.currentAction)) return;
+
             if (action === "idle") {
               setPets(prev => prev.map(p =>
                 p.id === petId ? { ...p, currentAction: "idle" as ActionName } : p
