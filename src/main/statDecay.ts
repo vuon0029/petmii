@@ -43,7 +43,7 @@ const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
 
 // Egg discovery config
 const EGG_DAILY_CHANCE = 1; // TESTING — not used directly when override below is active
-const EGG_HOURLY_CHANCE = 0.45; // TESTING: ~95% chance to find egg within 5 minutes (5 ticks)
+const EGG_HOURLY_CHANCE = EGG_DAILY_CHANCE / 24; // TESTING: ~95% chance to find egg within 5 minutes (5 ticks)
 const HEALTHY_STAT_THRESHOLD = 60;
 const MAX_EGGS = 3;
 const SHINY_EGG_CHANCE = 1 / 200;

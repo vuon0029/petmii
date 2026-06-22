@@ -12,6 +12,6 @@ export interface SpeciesStageTiming {
 
 /** Species life-stage timing thresholds used for evolution readiness checks */
 export const SPECIES_STAGE_THRESHOLDS: Record<PetSpecies, SpeciesStageTiming> = {
-  blob: { babyToChild: 0.01, childToAdult: 0.01 }, // TESTING values — match current speciesTraits.ts
-  frog: { babyToChild: 0.01, childToAdult: 0.01 }, // TESTING values — match current speciesTraits.ts
+  blob: { babyToChild: 24, childToAdult: 72 }, // TESTING values — match current speciesTraits.ts
+  frog: { babyToChild: 48, childToAdult: 120 }, // TESTING values — match current speciesTraits.ts
 };
