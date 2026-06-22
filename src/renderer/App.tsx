@@ -11,7 +11,7 @@ import { RenamePetModal } from "./components/RenamePetModal";
 import { DeathScreen } from "./components/DeathScreen";
 import { EggList } from "./components/EggList";
 import { ResourceMonitor } from "./components/ResourceMonitor";
-import type { GameState, Egg } from "./types";
+import type { GameState } from "./types";
 
 type AppView = "loading" | "egg-ready" | "hatching" | "pets" | "death";
 
@@ -25,9 +25,13 @@ export function App() {
   > | null>(null);
   const [lastDead, setLastDead] = useState<PetState | null>(null);
   const [activeTab, setActiveTab] = useState<
-    "pets" | "eggs" | "overlay" | "stats"
+    "pets" | "eggs" | "overlay" | "settings" | "stats"
   >("pets");
   const [overlayOn, setOverlayOn] = useState(false);
+  const [isRestingInOverlay, setIsRestingInOverlay] = useState(false);
+  const [isAutonomousActionActive, setIsAutonomousActionActive] = useState(false);
+  const [evolvingPetId, setEvolvingPetId] = useState<string | null>(null);
+  const [evolutionReveal, setEvolutionReveal] = useState<{ petName: string; newStage: string; adultTrait: string | null } | null>(null);
 
   // Load game state on mount
   useEffect(() => {
@@ -38,6 +42,15 @@ export function App() {
       // Sync overlay toggle with actual state
       const overlayVisible = await window.petmiiAPI.isOverlayVisible();
       setOverlayOn(overlayVisible);
+
+      // Sync rest button state with main process (survives window remount)
+      if (loaded.pets.length > 0 && overlayVisible) {
+        const selectedId = loaded.pets[0]?.id;
+        if (selectedId) {
+          const resting = await window.petmiiAPI.isRestingInOverlay(selectedId);
+          setIsRestingInOverlay(resting);
+        }
+      }
 
       if (loaded.pets.length > 0) {
         setView("pets");
@@ -65,10 +78,52 @@ export function App() {
       // Individual pet died but others still alive — just refresh
       // Game state will be updated via onGameStateUpdate
     });
+
+    window.petmiiAPI.onRestEnded(() => {
+      setIsRestingInOverlay(false);
+    });
+
+    window.petmiiAPI.onAutonomousActionStarted((data) => {
+      if (game?.pets[selectedPetIndex]?.id === data.petId) {
+        setIsAutonomousActionActive(true);
+      }
+    });
+    window.petmiiAPI.onAutonomousActionEnded((data) => {
+      if (game?.pets[selectedPetIndex]?.id === data.petId) {
+        setIsAutonomousActionActive(false);
+      }
+    });
+
+    window.petmiiAPI.onEvolveComplete((data) => {
+      const { petId, newStage, adultTrait } = data;
+      setEvolvingPetId(null);
+      // Find pet name from current game state
+      setGame((currentGame) => {
+        const pet = currentGame?.pets.find(p => p.id === petId);
+        const petName = pet?.name || "Your pet";
+        setEvolutionReveal({ petName, newStage, adultTrait });
+        return currentGame;
+      });
+    });
+
+    window.petmiiAPI.onEvolveRejected(() => {
+      setEvolvingPetId(null);
+    });
   }, []);
 
   // Selected pet from game state
   const selectedPet = game?.pets[selectedPetIndex] || null;
+
+  // Sync rest button when selected pet changes
+  useEffect(() => {
+    if (!selectedPet || !overlayOn) {
+      setIsRestingInOverlay(false);
+      setIsAutonomousActionActive(false);
+      return;
+    }
+    window.petmiiAPI.isRestingInOverlay(selectedPet.id).then(setIsRestingInOverlay);
+    window.petmiiAPI.isAutonomousActionActive(selectedPet.id).then(setIsAutonomousActionActive);
+  }, [selectedPetIndex, selectedPet?.id, overlayOn]);
 
   // ===== Actions =====
 
@@ -104,6 +159,11 @@ export function App() {
 
     try {
       await window.petmiiAPI.addPet(newPet);
+      // If overlay is on, add the new pet to overlay pets list
+      if (overlayOn) {
+        const currentOverlayPets = await window.petmiiAPI.getOverlayPets();
+        await window.petmiiAPI.setOverlayPets([...currentOverlayPets, newPet.id]);
+      }
       const fresh = await window.petmiiAPI.loadGame();
       setGame(fresh);
       setSelectedPetIndex(fresh.pets.length - 1);
@@ -142,26 +202,48 @@ export function App() {
 
   async function handleFeed() {
     if (!selectedPet) return;
+    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
     const updated = applyAction(selectedPet, "feed");
     await savePet(updated);
+    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "feed" });
   }
 
   async function handlePlay() {
     if (!selectedPet || selectedPet.energy < 10) return;
+    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
     const updated = applyAction(selectedPet, "play");
     await savePet(updated);
+    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "play" });
   }
 
   async function handleClean() {
     if (!selectedPet) return;
+    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
     const updated = applyAction(selectedPet, "clean");
     await savePet(updated);
+    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "clean" });
   }
 
   async function handleRest() {
     if (!selectedPet) return;
-    const updated = applyAction(selectedPet, "rest");
-    await savePet(updated);
+    if (isRestingInOverlay || isAutonomousActionActive) return; // Already resting/autonomous — ignore
+
+    if (overlayOn) {
+      // Send REST command to overlay via IPC (Req 8.1)
+      window.petmiiAPI.startOverlayRest({ petId: selectedPet.id });
+      setIsRestingInOverlay(true); // Disable button (Req 8.9)
+    } else {
+      // Direct stat application (no overlay active)
+      const updated = applyAction(selectedPet, "rest");
+      await savePet(updated);
+    }
+  }
+
+  function handleEvolve() {
+    if (!selectedPet || evolvingPetId === selectedPet.id) return;
+    const sessionId = crypto.randomUUID();
+    setEvolvingPetId(selectedPet.id);
+    window.petmiiAPI.evolveStart({ petId: selectedPet.id, sessionId });
   }
 
   async function handleRename(newName: string) {
@@ -257,7 +339,7 @@ export function App() {
         <button
           type="button"
           className={`app-tab ${activeTab === "eggs" ? "app-tab-active" : ""}`}
-          onClick={() => setActiveTab("eggs")}
+          onClick={() => { setActiveTab("eggs"); window.petmiiAPI.clearEggNotifications(); }}
         >
           🥚 Eggs ({game.eggs.length})
         </button>
@@ -267,6 +349,13 @@ export function App() {
           onClick={() => setActiveTab("overlay")}
         >
           👁 Overlay
+        </button>
+        <button
+          type="button"
+          className={`app-tab ${activeTab === "settings" ? "app-tab-active" : ""}`}
+          onClick={() => setActiveTab("settings")}
+        >
+          ⚙ Settings
         </button>
         <button
           type="button"
@@ -315,6 +404,10 @@ export function App() {
                 onPlay={handlePlay}
                 onClean={handleClean}
                 onRest={handleRest}
+                onEvolve={handleEvolve}
+                restDisabled={isRestingInOverlay || isAutonomousActionActive}
+                actionsDisabled={isRestingInOverlay || isAutonomousActionActive}
+                evolving={evolvingPetId === selectedPet.id}
               />
               {showRenameModal && (
                 <RenamePetModal
@@ -329,7 +422,7 @@ export function App() {
           {game.pets.length === 0 && (
             <div className="no-pets-message">
               <p>No pets yet. Check your eggs!</p>
-              <button type="button" onClick={() => setActiveTab("eggs")}>
+              <button type="button" onClick={() => { setActiveTab("eggs"); window.petmiiAPI.clearEggNotifications(); }}>
                 View Eggs
               </button>
             </div>
@@ -343,6 +436,7 @@ export function App() {
           onHatch={handleEggHatch}
           onDiscard={handleDiscardEgg}
           pets={game.pets}
+          onGameUpdate={setGame}
         />
       )}
 
@@ -408,13 +502,98 @@ export function App() {
         </div>
       )}
 
+      {activeTab === "settings" && game && (
+        <SettingsTab game={game} onGameUpdate={setGame} overlayOn={overlayOn} />
+      )}
+
       {activeTab === "stats" && (
         <div className="stats-tab">
           <ResourceMonitor />
         </div>
       )}
+
+      {evolutionReveal && (
+        <div className="evolution-reveal" onClick={() => setEvolutionReveal(null)}>
+          <p className="evolution-reveal-title">
+            {getRevealTitle(evolutionReveal)}
+          </p>
+          <p className="evolution-reveal-body">
+            {getRevealBody(evolutionReveal)}
+          </p>
+          <span className="evolution-reveal-dismiss">tap to dismiss</span>
+        </div>
+      )}
     </div>
   );
+}
+
+// ===== Settings Tab =====
+
+function SettingsTab({ game, onGameUpdate, overlayOn }: { game: GameState; onGameUpdate: (g: GameState) => void; overlayOn: boolean }) {
+  const petScale = game.settings.petScale ?? 1.5;
+
+  async function handleScaleChange(newScale: number) {
+    if (overlayOn) return;
+    const updated: GameState = {
+      ...game,
+      settings: { ...game.settings, petScale: newScale },
+    };
+    await window.petmiiAPI.saveGame(updated);
+    onGameUpdate(updated);
+  }
+
+  return (
+    <div className="settings-tab">
+      <h3>Settings</h3>
+      <div className="settings-item">
+        <label className="settings-label" htmlFor="pet-scale-slider">
+          Pet Size (Overlay)
+        </label>
+        <div className="settings-slider-row">
+          <input
+            id="pet-scale-slider"
+            type="range"
+            min="0.5"
+            max="3"
+            step="0.25"
+            value={petScale}
+            disabled={overlayOn}
+            onChange={(e) => handleScaleChange(parseFloat(e.target.value))}
+          />
+          <span className="settings-value">{petScale.toFixed(2)}x</span>
+        </div>
+        {overlayOn && (
+          <p className="settings-note">Turn off overlay to change pet size</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== Evolution reveal helpers =====
+
+function getRevealTitle(reveal: { petName: string; newStage: string; adultTrait: string | null }): string {
+  if (reveal.newStage === "child") {
+    return `${reveal.petName} evolved into a Child!`;
+  }
+  if (reveal.adultTrait) {
+    return `${reveal.petName} grew into a ${reveal.adultTrait} Adult!`;
+  }
+  return `${reveal.petName} grew into an Adult!`;
+}
+
+function getRevealBody(reveal: { petName: string; newStage: string; adultTrait: string | null }): string {
+  if (reveal.newStage === "child") {
+    return "They look a little more confident now.";
+  }
+  switch (reveal.adultTrait) {
+    case "Playful": return `All that playtime made ${reveal.petName} bold, bouncy, and full of energy.`;
+    case "Affectionate": return `All that closeness made ${reveal.petName} warm, gentle, and loving.`;
+    case "Sleepy": return `All those cozy naps made ${reveal.petName} calm, peaceful, and content.`;
+    case "Chaotic": return `All those wild flights made ${reveal.petName} fearless and full of surprises.`;
+    case "Classic": return `Steady, familiar, and easygoing — a timeless little friend.`;
+    default: return "A wonderful transformation!";
+  }
 }
 
 // ===== Action helpers =====

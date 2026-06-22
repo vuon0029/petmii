@@ -31,19 +31,8 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
       cleanliness: 1.0,
       bond: 1.0,
     },
-    stages: { babyToChild: 0.01, childToAdult: 0.01 }, //TESTING
+    stages: { babyToChild: 0.01, childToAdult: 0.01 }, // TESTING
     description: "Always hungry, but chill energy",
-  },
-  star: {
-    decay: {
-      hunger: 1.0,
-      happiness: 1.0,
-      energy: 1.0,
-      cleanliness: 1.0,
-      bond: 1.0,
-    },
-    stages: { babyToChild: 24, childToAdult: 72 },
-    description: "Perfectly balanced, no weakness",
   },
   frog: {
     decay: {

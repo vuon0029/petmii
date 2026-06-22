@@ -54,6 +54,8 @@ function saveGraveyard(entries: GraveyardEntry[]): void {
 /**
  * Adds a dead pet to the graveyard.
  */
+export const MAX_GRAVEYARD_ENTRIES = 10;
+
 export function saveToGraveyard(pet: PetState): void {
   const entries = loadGraveyard();
   const entry: GraveyardEntry = {
@@ -67,7 +69,9 @@ export function saveToGraveyard(pet: PetState): void {
     diedAt: pet.diedAt || new Date().toISOString(),
   };
   entries.push(entry);
-  saveGraveyard(entries);
+  // Keep only the latest entries
+  const trimmed = entries.slice(-MAX_GRAVEYARD_ENTRIES);
+  saveGraveyard(trimmed);
 }
 
 /**

@@ -1,7 +1,9 @@
 import { PetState } from "../pet/petVariant";
 import { PetAvatar } from "./PetAvatar";
 import { StatBar } from "./StatBar";
-import { SPECIES_TRAITS } from "../pet/speciesTraits";
+import { getEvolutionReadiness } from "../../shared/pet/evolutionReadiness";
+import { resolveVariantId } from "../overlay/variantId";
+import { generatePersonalityNotes } from "../pet/personalityNotes";
 import "../styles/pet-details.css";
 
 interface PetDetailsProps {
@@ -12,6 +14,10 @@ interface PetDetailsProps {
   onPlay: () => void;
   onClean: () => void;
   onRest: () => void;
+  onEvolve: () => void;
+  restDisabled?: boolean;
+  actionsDisabled?: boolean;
+  evolving?: boolean;
 }
 
 function formatAge(hatchedAt: string): string {
@@ -24,27 +30,24 @@ function formatAge(hatchedAt: string): string {
   return `${hours}h`;
 }
 
-function getNextStageInfo(petState: PetState): string | null {
-  const traits = SPECIES_TRAITS[petState.species];
-  const ageMs = Date.now() - new Date(petState.hatchedAt).getTime();
-  const ageHours = ageMs / (1000 * 60 * 60);
-
-  if (petState.lifeStage === "baby") {
-    const remaining = traits.stages.babyToChild - ageHours;
-    if (remaining <= 0) return "Ready to evolve!";
-    const h = Math.ceil(remaining);
-    return `Child in ~${h}h`;
+function getNextStageInfo(petState: PetState): { text: string; isReady: boolean } | null {
+  if (petState.lifeStage === "adult" || petState.lifeStage === "egg") {
+    return null;
   }
 
-  if (petState.lifeStage === "child") {
-    const totalToAdult = traits.stages.babyToChild + traits.stages.childToAdult;
-    const remaining = totalToAdult - ageHours;
-    if (remaining <= 0) return "Ready to evolve!";
-    const h = Math.ceil(remaining);
-    return `Adult in ~${h}h`;
+  const readiness = getEvolutionReadiness({
+    species: petState.species,
+    lifeStage: petState.lifeStage as "baby" | "child" | "adult",
+    hatchedAt: Date.parse(petState.hatchedAt),
+  });
+
+  if (readiness.isReady) {
+    return { text: "Ready to evolve!", isReady: true };
   }
 
-  return null; // Adult — no next stage to show
+  const h = Math.ceil(readiness.remainingHours!);
+  const nextLabel = readiness.nextStage === "child" ? "Child" : "Adult";
+  return { text: `${nextLabel} in ~${h}h`, isReady: false };
 }
 
 export function PetDetails({
@@ -55,6 +58,10 @@ export function PetDetails({
   onPlay,
   onClean,
   onRest,
+  onEvolve,
+  restDisabled,
+  actionsDisabled,
+  evolving,
 }: PetDetailsProps) {
   const canRename = petState.lifeStage === "adult";
   const nextStage = getNextStageInfo(petState);
@@ -102,16 +109,30 @@ export function PetDetails({
           Age: {formatAge(petState.hatchedAt)}
         </span>
         {nextStage && (
-          <span className="pet-details-next-stage">{nextStage}</span>
+          <span className="pet-details-next-stage">
+            {nextStage.isReady ? (
+              <button
+                type="button"
+                className="pet-details-evolve-btn"
+                onClick={onEvolve}
+                disabled={evolving}
+              >
+                {evolving ? "Evolving..." : "Evolve"}
+              </button>
+            ) : (
+              <span className="pet-details-next-stage-countdown">{nextStage.text}</span>
+            )}
+          </span>
         )}
       </div>
 
       <div className="pet-details-avatar">
         <PetAvatar
           species={petState.species}
-          color={petState.color}
+          variantId={resolveVariantId(petState)}
           personality={petState.personality}
           lifeStage={petState.lifeStage}
+          visualState="idle"
         />
         <div className="pet-details-speech-wrapper">
           {petState.lastMessage && petState.lastMessage !== "~" && (
@@ -157,17 +178,31 @@ export function PetDetails({
         />
       </div>
 
+      {/* Personality Notes */}
+      {petState.lifeStage !== "egg" && (
+        <div className="personality-notes">
+          {generatePersonalityNotes({
+            name: petState.name,
+            lifeStage: petState.lifeStage as "baby" | "child" | "adult",
+            careHistory: petState.careHistory,
+            adultTrait: petState.adultTrait,
+          }).map((note, i) => (
+            <p key={i} className="personality-note-line">{note}</p>
+          ))}
+        </div>
+      )}
+
       <div className="pet-details-actions">
-        <button type="button" onClick={onFeed}>
+        <button type="button" onClick={onFeed} disabled={actionsDisabled}>
           Feed
         </button>
-        <button type="button" onClick={onPlay}>
+        <button type="button" onClick={onPlay} disabled={actionsDisabled}>
           Play
         </button>
-        <button type="button" onClick={onClean}>
+        <button type="button" onClick={onClean} disabled={actionsDisabled}>
           Clean
         </button>
-        <button type="button" onClick={onRest}>
+        <button type="button" onClick={onRest} disabled={restDisabled || actionsDisabled}>
           Rest
         </button>
       </div>

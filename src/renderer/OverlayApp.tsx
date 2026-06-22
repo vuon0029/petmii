@@ -2,32 +2,44 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { PetState } from "./pet/petVariant";
 import { PetAvatar } from "./components/PetAvatar";
 import type { GameState } from "./types";
+import { ActionName, MovementProfile, MOVEMENT_PROFILES, ACTION_DEFINITIONS, GLOBAL_DEFAULT_PROFILE } from "./overlay/movementProfiles";
+import { createActionScheduler, destroyActionScheduler, ActionSchedulerState, PhysicsState } from "./overlay/actionScheduler";
+import { animateMovementAction } from "./overlay/movementController";
+import { resolveProfile, computeResolvedRestY } from "./overlay/profileResolver";
+import { resolveVariantId } from "./overlay/variantId";
+import { createCursorAttractionController, destroyCursorAttractionController, notifyApproachEnded, resolveApproachAmbientAction, computeSlotOffsetY, CursorAttractionState, CursorAttractionDeps, MOUSE_ATTRACT_SPEED_MULTIPLIER, MOUSE_ATTRACT_PAUSE_MULTIPLIER } from "./overlay/cursorAttractionController";
+import { createAutonomousActionController, destroyAutonomousActionController, notifyAutonomousRestEnded, notifyPlayTogetherEnded, computeFacingDirections, generatePlaySpacing, selectPlayIcon, AutonomousActionState } from "./overlay/autonomousActionController";
+import { getCursorPos } from "./overlay/getCursorPos";
+import { shouldCountPickup } from "./overlay/pickedUpTracker";
+import { classifyRelease, onWallCollision, createThrowSequenceState, ThrowSequenceState } from "./overlay/throwTracker";
+import { computeEvolutionStyles, isMidpoint, EVOLUTION_DURATION_MS } from "./overlay/evolutionAnimation";
+import type { EvolutionAnimationState } from "./overlay/evolutionAnimation";
+import { THROW_SPEED_THRESHOLD } from "../shared/pet/careConstants";
+import type { LifecycleState } from "../shared/pet/careHistory";
 import "./styles/overlay.css";
 import "./styles/pet-avatar.css";
 
 const PET_BASE_SIZE = 48;
-const PET_SCALE = 1.5;
-const PET_RENDER_SIZE = PET_BASE_SIZE * PET_SCALE; // 72
+const DEFAULT_PET_SCALE = 1.5;
 const GROUND_OFFSET_PX = 0;
 
 const LOW_STAT_THRESHOLD = 50;
 const SPEECH_DISPLAY_MS = 8000;
+const REST_ACTION_DURATION_MS = 30000;
 
 // Physics constants
 const GRAVITY = 0.04;
-const HOP_INTERVAL_MS = 3000;
-const HOP_STEP_PX = 100;
-const HOP_HEIGHT_PX = 30;
-const HOP_DURATION_MS = 500;
-const PAUSE_CHANCE = 0.6;
 const BOUNCE_DAMPING = 0.2;
 const WALL_BOUNCE_DAMPING = 0.2;
 const DRAG_HISTORY_SIZE = 5;
 const ANGULAR_VEL_FACTOR = 0.03;
 const ANGULAR_DAMPING = 0.95;
 const WALL_PADDING = 4;
+const AIR_RELEASE_THRESHOLD_PX = 40;
 
-interface PetOverlayState {
+export type VisualState = "idle" | "sleep";
+
+export interface PetOverlayState {
   id: string;
   pet: PetState;
   x: number;
@@ -37,46 +49,76 @@ interface PetOverlayState {
   rotation: number;
   angularVel: number;
   direction: 1 | -1;
-  isHopping: boolean;
-  isDragging: boolean;
-  isFlying: boolean;
-  isLanded: boolean;
-  isGettingUp: boolean;
+  currentAction: ActionName;
+  physicsState: PhysicsState;
+  visualState: VisualState;
+  lifecycleState: LifecycleState;
+  resolvedProfile: MovementProfile;
+  restTimer: ReturnType<typeof setTimeout> | null;
   message: string | null;
   messageTimer: ReturnType<typeof setTimeout> | null;
   hasFoundEgg: boolean;
   isHovered: boolean;
+  isLeaving: boolean;
 }
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Extracts the translateY pixel value from a transform string like "translateY(-30px) scale(1.05)" */
+function parseTranslateY(transform: string): number {
+  const match = transform.match(/translateY\(([^)]+)px\)/);
+  return match ? parseFloat(match[1]) : 0;
+}
+
+/** Extracts the scale value from a transform string like "translateY(-30px) scale(1.05)" */
+function parseScaleFromTransform(transform: string): number {
+  const match = transform.match(/scale\(([^)]+)\)/);
+  return match ? parseFloat(match[1]) : 1;
+}
+
 export function OverlayApp() {
   const [pets, setPets] = useState<PetOverlayState[]>([]);
   const [containerWidth, setContainerWidth] = useState(window.innerWidth);
+  const [petScale, setPetScale] = useState(DEFAULT_PET_SCALE);
   const containerRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
-  const hopTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(
-    new Map(),
-  );
+  const schedulersRef = useRef<Map<string, ActionSchedulerState>>(new Map());
+  const movementCancelRef = useRef<Map<string, () => void>>(new Map());
+  const pendingRestRef = useRef<Set<string>>(new Set());
+  const petsRef = useRef<PetOverlayState[]>([]);
+  petsRef.current = pets;
+  const petScaleRef = useRef(DEFAULT_PET_SCALE);
+  petScaleRef.current = petScale;
   const dragState = useRef<{
     petId: string | null;
     startTime: number;
     started: boolean;
     history: { x: number; y: number; t: number }[];
   }>({ petId: null, startTime: 0, started: false, history: [] });
+  const throwSequenceRef = useRef<ThrowSequenceState | null>(null);
+  const evolutionAnimRef = useRef<EvolutionAnimationState | null>(null);
+  const evolutionFrameRef = useRef<number>(0);
+  const autonomousActionRef = useRef<AutonomousActionState | null>(null);
+  const [playTogetherIcon, setPlayTogetherIcon] = useState<string | null>(null);
+  const playBurstTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [burstingPets, setBurstingPets] = useState<Set<string>>(new Set());
 
   function getContainerHeight() {
     return containerRef.current?.clientHeight || window.innerHeight;
   }
 
+  function getPetRenderSize() {
+    return PET_BASE_SIZE * petScaleRef.current;
+  }
+
   function getGroundY() {
-    return getContainerHeight() - PET_RENDER_SIZE - GROUND_OFFSET_PX;
+    return getContainerHeight() - getPetRenderSize() - GROUND_OFFSET_PX;
   }
 
   function getMaxX() {
-    return Math.max(0, containerWidth - PET_RENDER_SIZE);
+    return Math.max(0, containerWidth - getPetRenderSize());
   }
 
   function clampX(x: number) {
@@ -98,14 +140,34 @@ export function OverlayApp() {
           ? livingPets.filter((p) => overlayIds.includes(p.id))
           : livingPets;
 
+      // Update pet scale if changed
+      const newScale = g.settings.petScale ?? DEFAULT_PET_SCALE;
+      if (newScale !== petScaleRef.current) {
+        setPetScale(newScale);
+      }
+
       setPets((prev) => {
         // Merge: keep existing positions for pets that are still alive
         const merged: PetOverlayState[] = [];
+        const visibleIds = new Set(visiblePets.map(p => p.id));
+
+        // Mark pets that are no longer in the list as leaving
+        for (const existing of prev) {
+          if (!visibleIds.has(existing.id) && !existing.isLeaving) {
+            merged.push({ ...existing, isLeaving: true });
+          }
+        }
+
         for (const pet of visiblePets) {
           const existing = prev.find((p) => p.id === pet.id);
           if (existing) {
             // Update pet data but keep position/physics
-            merged.push({ ...existing, pet });
+            // Re-resolve profile if lifeStage changed (evolution)
+            const lifeStageChanged = pet.lifeStage !== existing.pet.lifeStage;
+            const updatedProfile = lifeStageChanged
+              ? resolveProfile(pet.species, pet.lifeStage, MOVEMENT_PROFILES)
+              : existing.resolvedProfile;
+            merged.push({ ...existing, pet, resolvedProfile: updatedProfile });
 
             // Check for message changes
             if (
@@ -132,7 +194,7 @@ export function OverlayApp() {
             }
           } else {
             // New pet — random position
-            merged.push(createPetState(pet, containerWidth));
+            merged.push(createPetState(pet, containerWidth, petScaleRef.current));
           }
         }
         return merged;
@@ -149,8 +211,11 @@ export function OverlayApp() {
         overlayIds.length > 0
           ? livingPets.filter((p) => overlayIds.includes(p.id))
           : livingPets;
+      // Apply persisted pet scale
+      const savedScale = game.settings.petScale ?? DEFAULT_PET_SCALE;
+      setPetScale(savedScale);
       setPets(
-        visiblePets.map((p: PetState) => createPetState(p, window.innerWidth)),
+        visiblePets.map((p: PetState) => createPetState(p, window.innerWidth, savedScale)),
       );
     }
     init();
@@ -167,35 +232,802 @@ export function OverlayApp() {
       );
     });
 
+    // Listen for egg notification clear signal (from main window when Eggs tab is viewed)
+    window.petmiiAPI.onClearEggNotifications(() => {
+      setPets((prev) => prev.map((p) => ({ ...p, hasFoundEgg: false })));
+    });
+
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Start hopping timers for each pet
-  useEffect(() => {
-    // Clear old timers
-    for (const timer of hopTimersRef.current.values()) {
-      clearInterval(timer);
-    }
-    hopTimersRef.current.clear();
+  // Evolution animation loop — updates pet position in state every frame for smooth movement
+  function startEvolutionLoop() {
+    function frame() {
+      const state = evolutionAnimRef.current;
+      if (!state) return;
 
+      const elapsed = Date.now() - state.startedAt;
+
+      // Check midpoint — fire once to commit lifeStage
+      if (!state.midpointFired && isMidpoint(elapsed)) {
+        state.midpointFired = true;
+        window.petmiiAPI.evolveMidpoint({ petId: state.petId, sessionId: state.sessionId });
+      }
+
+      // Check completion
+      if (elapsed >= EVOLUTION_DURATION_MS) {
+        // Animation complete — restore normal state, pet y is already at ground from descending
+        setPets(prev => prev.map(p => {
+          if (p.id !== state.petId) return p;
+          const groundY = getGroundY();
+          const restY = computeResolvedRestY(groundY, p.resolvedProfile);
+          return { ...p, lifecycleState: "normal" as LifecycleState, y: restY };
+        }));
+        evolutionAnimRef.current = null;
+        return;
+      }
+
+      // Update pet y position and trigger re-render every frame
+      const styles = computeEvolutionStyles(elapsed);
+      setPets(prev => prev.map(p => {
+        if (p.id !== state.petId) return p;
+        // Store the base rest Y so we can offset from it
+        const groundY = getGroundY();
+        const restY = computeResolvedRestY(groundY, p.resolvedProfile);
+        // Parse the translateY value from the transform string
+        const yOffset = parseTranslateY(styles.transform);
+        return { ...p, y: restY + yOffset };
+      }));
+
+      // Continue loop
+      evolutionFrameRef.current = requestAnimationFrame(frame);
+    }
+
+    evolutionFrameRef.current = requestAnimationFrame(frame);
+  }
+
+  // Listen for evolve:start IPC from the main process
+  useEffect(() => {
+    window.petmiiAPI.onEvolveStart((data) => {
+      const { petId, sessionId } = data as { petId: string; sessionId: string; targetStage: string };
+
+      // Set pet's lifecycleState to "evolving"
+      setPets(prev => prev.map(p =>
+        p.id === petId ? { ...p, lifecycleState: "evolving" as LifecycleState } : p
+      ));
+
+      // Cancel any autonomous action for this pet
+      const evolvingPet = petsRef.current.find(p => p.id === petId);
+      if (evolvingPet?.currentAction === "autonomousRest") {
+        cancelAutonomousRest(petId);
+      }
+      if (evolvingPet?.currentAction === "playTogether") {
+        cancelPlayTogether(petId);
+      }
+
+      // Start evolution animation state
+      evolutionAnimRef.current = {
+        petId,
+        sessionId,
+        phase: "rising",
+        startedAt: Date.now(),
+        midpointFired: false,
+      };
+
+      // Start the animation frame loop
+      startEvolutionLoop();
+    });
+
+    return () => {
+      cancelAnimationFrame(evolutionFrameRef.current);
+    };
+  }, []);
+
+  // Remove pets after leave animation completes
+  useEffect(() => {
+    const leavingPets = pets.filter(p => p.isLeaving);
+    for (const p of leavingPets) {
+      setTimeout(() => {
+        setPets(prev => prev.filter(pp => pp.id !== p.id));
+      }, 1200); // matches animation duration
+    }
+  }, [pets.filter(p => p.isLeaving).length]);
+
+  // Action scheduler setup for each pet
+  useEffect(() => {
+    const currentPetIds = new Set(pets.map(p => p.id));
+
+    // Destroy schedulers for removed pets
+    for (const [petId, scheduler] of schedulersRef.current.entries()) {
+      if (!currentPetIds.has(petId)) {
+        destroyActionScheduler(scheduler);
+        schedulersRef.current.delete(petId);
+        // Cancel any in-progress movement for removed pet
+        const cancel = movementCancelRef.current.get(petId);
+        if (cancel) {
+          cancel();
+          movementCancelRef.current.delete(petId);
+        }
+        // If removed pet had an active approach, release the slot in the controller
+        if (cursorAttractionRef.current?.activePetIds.has(petId)) {
+          notifyApproachEnded(cursorAttractionRef.current, petId);
+        }
+      }
+    }
+
+    // Create schedulers for new pets
     for (const pet of pets) {
-      if (!hopTimersRef.current.has(pet.id)) {
-        const timer = setInterval(
-          () => {
-            triggerHop(pet.id);
-          },
-          HOP_INTERVAL_MS + Math.random() * 1000,
+      if (!schedulersRef.current.has(pet.id)) {
+        const petId = pet.id;
+
+        const scheduler = createActionScheduler(
+          petId,
+          () => petsRef.current.find(p => p.id === petId)?.resolvedProfile ?? GLOBAL_DEFAULT_PROFILE,
+          () => petsRef.current.find(p => p.id === petId)?.physicsState ?? "idle",
+          () => petsRef.current.find(p => p.id === petId)?.currentAction ?? "idle",
+          (action: ActionName) => {
+            // Skip dispatching actions for evolving pets
+            const pet = petsRef.current.find(p => p.id === petId);
+            if (pet?.lifecycleState === "evolving") return;
+
+            if (action === "idle") {
+              setPets(prev => prev.map(p =>
+                p.id === petId ? { ...p, currentAction: "idle" as ActionName } : p
+              ));
+              return;
+            }
+
+            const actionDef = ACTION_DEFINITIONS[action];
+            if (!actionDef) {
+              // Unknown action name — ignore gracefully, don't crash
+              return;
+            }
+            if (actionDef.category === "movement") {
+              dispatchMovementAction(petId, action);
+            } else {
+              // Stationary action (bounce, squish, idle, etc.) — just set currentAction, no position change
+              setPets(prev => prev.map(p =>
+                p.id === petId ? { ...p, currentAction: action } : p
+              ));
+            }
+          }
         );
-        hopTimersRef.current.set(pet.id, timer);
+
+        schedulersRef.current.set(petId, scheduler);
       }
     }
 
     return () => {
-      for (const timer of hopTimersRef.current.values()) {
-        clearInterval(timer);
+      // Cleanup all schedulers on unmount
+      for (const scheduler of schedulersRef.current.values()) {
+        destroyActionScheduler(scheduler);
       }
+      schedulersRef.current.clear();
+      // Cancel all in-progress movements
+      for (const cancel of movementCancelRef.current.values()) {
+        cancel();
+      }
+      movementCancelRef.current.clear();
     };
   }, [pets.map((p) => p.id).join(",")]);
+
+  // Cursor attraction controller
+  const cursorPosRef = useRef<{ x: number; y: number } | null>(null);
+  const cursorAttractionRef = useRef<CursorAttractionState | null>(null);
+
+  useEffect(() => {
+    // Poll cursor position via IPC every 200ms and cache in ref
+    const cursorPollTimer = setInterval(async () => {
+      const pos = await getCursorPos();
+      cursorPosRef.current = pos;
+    }, 200);
+
+    const ARRIVAL_THRESHOLD_PX = 5;
+
+    // Approach step loop: iteratively animate one step at a time toward the target
+    function startApproachLoop(petId: string, targetX: number, targetY: number) {
+      let firstStep = true;
+
+      const executeStep = () => {
+        const pet = petsRef.current.find(p => p.id === petId);
+        if (!pet) return;
+        // On the first step, skip the currentAction guard because setPets
+        // may not have flushed yet. On subsequent steps, verify the pet is
+        // still in approachCursor (could have been cancelled mid-loop).
+        if (!firstStep && pet.currentAction !== "approachCursor") return;
+        firstStep = false;
+
+        const profile = pet.resolvedProfile;
+        const groundY = getGroundY();
+
+        // Compute the Y coordinate for this pet's approach
+        let approachY: number;
+        if (profile.movementStyle === "floating") {
+          const hoverOffsetY = profile.hoverOffsetY ?? 0;
+          approachY = groundY - hoverOffsetY + computeSlotOffsetY(0);
+        } else {
+          approachY = computeResolvedRestY(groundY, profile);
+        }
+
+        const dx = targetX - pet.x;
+
+        // Check arrival
+        if (Math.abs(dx) <= ARRIVAL_THRESHOLD_PX) {
+          // Snap to target, set idle, notify controller
+          setPets(prev => prev.map(p =>
+            p.id === petId ? { ...p, x: targetX, y: approachY, currentAction: "idle" as ActionName } : p
+          ));
+          movementCancelRef.current.delete(petId);
+          if (cursorAttractionRef.current) {
+            const deps: CursorAttractionDeps = {
+              getCursorPos: () => cursorPosRef.current,
+              getPets: () => petsRef.current,
+              getViewportWidth: () => window.innerWidth,
+              getGroundY: () => getGroundY(),
+              dispatchApproach: dispatchApproachFn,
+              cancelApproach: cancelApproachFn,
+            };
+            notifyApproachEnded(cursorAttractionRef.current, petId, deps);
+          }
+          return;
+        }
+
+        // Determine step direction and distance
+        const dir: 1 | -1 = dx > 0 ? 1 : -1;
+        const stepDist = Math.min(profile.stepDistance, Math.abs(dx));
+        const stepTargetX = pet.x + stepDist * dir;
+
+        // Update direction for this step
+        setPets(prev => prev.map(p =>
+          p.id === petId ? { ...p, direction: dir } : p
+        ));
+
+        // Animate one step using the resolved approach action's movement style
+        const cancel = animateMovementAction(
+          {
+            startX: pet.x,
+            startY: approachY,
+            targetX: stepTargetX,
+            targetY: approachY,
+            duration: Math.max(profile.duration / MOUSE_ATTRACT_SPEED_MULTIPLIER, 50),
+            hopHeight: profile.hopHeight,
+            landingPauseMs: Math.round(profile.landingPauseMs / MOUSE_ATTRACT_PAUSE_MULTIPLIER),
+            movementStyle: profile.movementStyle,
+          },
+          (x: number, y: number) => {
+            // onFrame: update position — always apply during approach loop
+            // The loop is only active while the pet is in approachCursor,
+            // so we don't need to re-check currentAction here.
+            setPets(prev => prev.map(p =>
+              p.id === petId
+                ? { ...p, x, y }
+                : p
+            ));
+          },
+          () => {
+            // onComplete: schedule next step
+            movementCancelRef.current.delete(petId);
+            executeStep();
+          }
+        );
+
+        movementCancelRef.current.set(petId, cancel);
+      };
+
+      executeStep();
+    }
+
+    // dispatchApproach callback — sets currentAction, direction, and starts the approach loop
+    function dispatchApproachFn(petId: string, targetX: number, targetY: number) {
+      const pet = petsRef.current.find(p => p.id === petId);
+      if (!pet) return;
+
+      // Cancel autonomousRest if active
+      if (pet.currentAction === "autonomousRest") {
+        cancelAutonomousRest(petId);
+      }
+      // Cancel playTogether if active
+      if (pet.currentAction === "playTogether") {
+        cancelPlayTogether(petId);
+      }
+
+      // Compute direction based on target vs current X
+      const dir: 1 | -1 = targetX >= pet.x ? 1 : -1;
+
+      // Show a bubble message when the pet notices the cursor
+      if (pet.messageTimer) clearTimeout(pet.messageTimer);
+      const msgTimer = setTimeout(() => {
+        setPets(prev => prev.map(p =>
+          p.id === petId ? { ...p, message: null, messageTimer: null } : p
+        ));
+      }, 2000);
+
+      // Set currentAction to "approachCursor", update direction, and show bubble
+      setPets(prev => prev.map(p =>
+        p.id === petId ? { ...p, currentAction: "approachCursor" as ActionName, direction: dir, message: "!", messageTimer: msgTimer } : p
+      ));
+
+      // Cancel any existing movement animation for this pet
+      const existingCancel = movementCancelRef.current.get(petId);
+      if (existingCancel) {
+        existingCancel();
+        movementCancelRef.current.delete(petId);
+      }
+
+      // Start the iterative approach loop
+      startApproachLoop(petId, targetX, targetY);
+    }
+
+    // cancelApproach callback — cancels animation, sets idle, notifies controller
+    function cancelApproachFn(petId: string) {
+      // Cancel stored animation from movementCancelRef
+      const cancelFn = movementCancelRef.current.get(petId);
+      if (cancelFn) {
+        cancelFn();
+        movementCancelRef.current.delete(petId);
+      }
+
+      // Set currentAction to "idle" — do NOT modify physicsState
+      setPets(prev => prev.map(p =>
+        p.id === petId ? { ...p, currentAction: "idle" as ActionName } : p
+      ));
+
+      // Notify controller to release slot and record cooldown
+      if (cursorAttractionRef.current) {
+        const deps: CursorAttractionDeps = {
+          getCursorPos: () => cursorPosRef.current,
+          getPets: () => petsRef.current,
+          getViewportWidth: () => window.innerWidth,
+          getGroundY: () => getGroundY(),
+          dispatchApproach: dispatchApproachFn,
+          cancelApproach: cancelApproachFn,
+        };
+        notifyApproachEnded(cursorAttractionRef.current, petId, deps);
+      }
+    }
+
+    // Create the cursor attraction controller
+    const controllerState = createCursorAttractionController({
+      getCursorPos: () => cursorPosRef.current,
+      getPets: () => petsRef.current,
+      getViewportWidth: () => window.innerWidth,
+      getGroundY: () => getGroundY(),
+      dispatchApproach: dispatchApproachFn,
+      cancelApproach: cancelApproachFn,
+    });
+
+    cursorAttractionRef.current = controllerState;
+
+    return () => {
+      clearInterval(cursorPollTimer);
+      destroyCursorAttractionController(controllerState);
+      cursorAttractionRef.current = null;
+    };
+  }, []);
+
+  // Autonomous action controller — dispatch/end functions
+  function dispatchAutonomousRestFn(petId: string) {
+    const pet = petsRef.current.find(p => p.id === petId);
+    if (!pet) return;
+    if (pet.physicsState !== "idle" || pet.currentAction !== "idle") return;
+
+    const restY = computeResolvedRestY(getGroundY(), pet.resolvedProfile);
+
+    setPets(prev => prev.map(p =>
+      p.id === petId
+        ? { ...p, currentAction: "autonomousRest" as ActionName, visualState: "sleep" as VisualState, y: restY }
+        : p
+    ));
+
+    window.petmiiAPI.sendAutonomousActionStarted({ petId, action: "autonomousRest" });
+  }
+
+  function endAutonomousRestFn(petId: string) {
+    const pet = petsRef.current.find(p => p.id === petId);
+    if (!pet || pet.currentAction !== "autonomousRest") return;
+
+    setPets(prev => prev.map(p =>
+      p.id === petId
+        ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState }
+        : p
+    ));
+
+    window.petmiiAPI.sendAutonomousActionEnded({ petId, action: "autonomousRest" });
+
+    if (autonomousActionRef.current) {
+      notifyAutonomousRestEnded(autonomousActionRef.current, petId);
+    }
+  }
+
+  function dispatchPlayTogetherFn(petId1: string, petId2: string, durationMs: number) {
+    const pet1 = petsRef.current.find(p => p.id === petId1);
+    const pet2 = petsRef.current.find(p => p.id === petId2);
+    if (!pet1 || !pet2) return;
+    if (pet1.physicsState !== "idle" || pet1.currentAction !== "idle") return;
+    if (pet2.physicsState !== "idle" || pet2.currentAction !== "idle") return;
+
+    // Compute meeting position — nudge pets close together within radius
+    const spacing = generatePlaySpacing(); // 20-50px random gap
+    const midX = (pet1.x + pet2.x) / 2;
+    const maxX = getMaxX();
+    const pet1X = clamp(midX - spacing / 2, 0, maxX);
+    const pet2X = clamp(midX + spacing / 2, 0, maxX);
+
+    // Compute ground Y for both
+    const groundY = getGroundY();
+    const pet1Y = computeResolvedRestY(groundY, pet1.resolvedProfile);
+    const pet2Y = computeResolvedRestY(groundY, pet2.resolvedProfile);
+
+    // Compute facing based on final positions
+    const { dir1, dir2 } = computeFacingDirections(pet1X, pet2X);
+
+    setPets(prev => prev.map(p => {
+      if (p.id === petId1) return { ...p, currentAction: "playTogether" as ActionName, visualState: "idle" as VisualState, direction: dir1, x: pet1X, y: pet1Y };
+      if (p.id === petId2) return { ...p, currentAction: "playTogether" as ActionName, visualState: "idle" as VisualState, direction: dir2, x: pet2X, y: pet2Y };
+      return p;
+    }));
+
+    setPlayTogetherIcon(selectPlayIcon());
+    startPlayBursts(petId1, petId2);
+
+    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId1, action: "playTogether" });
+    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId2, action: "playTogether" });
+  }
+
+  function endPlayTogetherFn(petId1: string, petId2: string) {
+    setPets(prev => prev.map(p => {
+      if ((p.id === petId1 || p.id === petId2) && p.currentAction === "playTogether") {
+        return { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState };
+      }
+      return p;
+    }));
+
+    setPlayTogetherIcon(null);
+    stopPlayBursts();
+
+    window.petmiiAPI.sendAutonomousActionEnded({ petId: petId1, action: "playTogether" });
+    window.petmiiAPI.sendAutonomousActionEnded({ petId: petId2, action: "playTogether" });
+
+    if (autonomousActionRef.current) {
+      notifyPlayTogetherEnded(autonomousActionRef.current, petId1, petId2);
+    }
+  }
+
+  // Helper: cancel autonomousRest for a specific pet
+  function cancelAutonomousRest(petId: string) {
+    if (!autonomousActionRef.current) return;
+    const state = autonomousActionRef.current;
+
+    // Clear the duration timer owned by the controller
+    const timer = state.activeRest.get(petId);
+    if (timer) {
+      clearTimeout(timer);
+    }
+
+    // Reset pet state to idle
+    setPets(prev => prev.map(p =>
+      p.id === petId && p.currentAction === "autonomousRest"
+        ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState }
+        : p
+    ));
+
+    window.petmiiAPI.sendAutonomousActionEnded({ petId, action: "autonomousRest" });
+
+    // Notify controller to record cooldown and clean up tracking
+    notifyAutonomousRestEnded(state, petId);
+  }
+
+  // Helper: cancel playTogether session (affects BOTH pets)
+  function cancelPlayTogether(petId: string) {
+    if (!autonomousActionRef.current) return;
+    const state = autonomousActionRef.current;
+    const session = state.activePlaySession;
+    if (!session) return;
+
+    // Only cancel if the given pet is part of this session
+    if (session.petId1 !== petId && session.petId2 !== petId) return;
+
+    // Clear the duration timer
+    clearTimeout(session.durationTimer);
+
+    // Reset both pets to idle
+    setPets(prev => prev.map(p => {
+      if ((p.id === session.petId1 || p.id === session.petId2) && p.currentAction === "playTogether") {
+        return { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState };
+      }
+      return p;
+    }));
+
+    setPlayTogetherIcon(null);
+    stopPlayBursts();
+
+    window.petmiiAPI.sendAutonomousActionEnded({ petId: session.petId1, action: "playTogether" });
+    window.petmiiAPI.sendAutonomousActionEnded({ petId: session.petId2, action: "playTogether" });
+
+    // Notify controller
+    notifyPlayTogetherEnded(state, session.petId1, session.petId2);
+  }
+
+  // ─── playTogether burst animation helpers ───
+
+  function startPlayBursts(petId1: string, petId2: string) {
+    // Schedule independent random bursts for each pet
+    scheduleBurst(petId1);
+    scheduleBurst(petId2);
+  }
+
+  function scheduleBurst(petId: string) {
+    // Random delay before next burst: 800-2500ms
+    const delay = Math.floor(Math.random() * 1700) + 800;
+    const timer = setTimeout(() => {
+      // Check if pet is still in playTogether
+      const pet = petsRef.current.find(p => p.id === petId);
+      if (!pet || pet.currentAction !== "playTogether") {
+        playBurstTimersRef.current.delete(petId);
+        return;
+      }
+      // Trigger burst
+      setBurstingPets(prev => new Set(prev).add(petId));
+      // Remove burst class after animation duration (500ms)
+      const clearTimer = setTimeout(() => {
+        setBurstingPets(prev => {
+          const next = new Set(prev);
+          next.delete(petId);
+          return next;
+        });
+        // Schedule next burst
+        scheduleBurst(petId);
+      }, 500);
+      playBurstTimersRef.current.set(petId + "_clear", clearTimer);
+    }, delay);
+    playBurstTimersRef.current.set(petId, timer);
+  }
+
+  function stopPlayBursts() {
+    for (const timer of playBurstTimersRef.current.values()) {
+      clearTimeout(timer);
+    }
+    playBurstTimersRef.current.clear();
+    setBurstingPets(new Set());
+  }
+
+  // Autonomous action controller lifecycle
+  useEffect(() => {
+    const controller = createAutonomousActionController({
+      getPets: () => petsRef.current,
+      getViewportWidth: () => window.innerWidth,
+      getGroundY: () => getGroundY(),
+      dispatchAutonomousRest: (petId) => dispatchAutonomousRestFn(petId),
+      endAutonomousRest: (petId) => endAutonomousRestFn(petId),
+      dispatchPlayTogether: (petId1, petId2, durationMs) => dispatchPlayTogetherFn(petId1, petId2, durationMs),
+      endPlayTogether: (petId1, petId2) => endPlayTogetherFn(petId1, petId2),
+      getCurrentHour: () => new Date().getHours(),
+    });
+    autonomousActionRef.current = controller;
+
+    return () => {
+      destroyAutonomousActionController(controller);
+      autonomousActionRef.current = null;
+    };
+  }, []);
+
+  // Helper: begins REST for a pet (sets state, starts timer, snaps to rest position)
+  function beginRest(petId: string) {
+    const pet = petsRef.current.find(p => p.id === petId);
+    if (!pet) return;
+
+    // Snap pet to its resolved rest Y position (ground level)
+    const groundY = getGroundY();
+    const restY = computeResolvedRestY(groundY, pet.resolvedProfile);
+
+    // Start REST: set currentAction to "rest", visualState to "sleep", snap y to restY
+    setPets(prev => prev.map(p =>
+      p.id === petId
+        ? { ...p, currentAction: "rest" as ActionName, visualState: "sleep" as VisualState, y: restY }
+        : p
+    ));
+
+    // Start 30s timer
+    const timer = setTimeout(async () => {
+      // REST completed — apply stat benefit
+      const currentPet = petsRef.current.find(p => p.id === petId);
+      if (currentPet && currentPet.currentAction === "rest") {
+        // Apply rest benefit using existing stat calculation
+        const updatedPetData = applyRestAction(currentPet.pet);
+        await window.petmiiAPI.savePet(updatedPetData);
+
+        // Reset to idle
+        setPets(prev => prev.map(p =>
+          p.id === petId
+            ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState, pet: updatedPetData, restTimer: null }
+            : p
+        ));
+
+        // Notify main view
+        window.petmiiAPI.sendRestEnded({ petId, completed: true });
+
+        // Record rest care action (main process derives stage)
+        window.petmiiAPI.careIncrement({ petId, action: "rest" });
+      }
+    }, REST_ACTION_DURATION_MS);
+
+    // Store the timer in state
+    setPets(prev => prev.map(p =>
+      p.id === petId ? { ...p, restTimer: timer } : p
+    ));
+  }
+
+  // REST action command handler
+  useEffect(() => {
+    const handleRestCommand = (data: { petId: string }) => {
+      const { petId } = data;
+      const pet = petsRef.current.find(p => p.id === petId);
+      if (!pet) return; // Unknown pet — ignore
+      if (pet.lifecycleState === "evolving") return; // Reject REST for evolving pets
+      if (pet.currentAction === "rest") return; // Already resting — idempotent
+      if (pendingRestRef.current.has(petId)) return; // Already queued — idempotent
+
+      // If pet is in autonomousRest, cancel it and begin manual REST
+      if (pet.currentAction === "autonomousRest") {
+        cancelAutonomousRest(petId);
+        beginRest(petId);
+        return;
+      }
+      // If pet is in playTogether, cancel session and begin manual REST
+      if (pet.currentAction === "playTogether") {
+        cancelPlayTogether(petId);
+        beginRest(petId);
+        return;
+      }
+
+      // If the pet was in approachCursor, cancel immediately and start REST
+      if (pet.currentAction === "approachCursor" && cursorAttractionRef.current) {
+        const cancelMovement = movementCancelRef.current.get(petId);
+        if (cancelMovement) {
+          cancelMovement();
+          movementCancelRef.current.delete(petId);
+        }
+        notifyApproachEnded(cursorAttractionRef.current, petId);
+        beginRest(petId);
+        return;
+      }
+
+      // If pet is mid-action (has an active movement animation), defer REST until it completes
+      const hasActiveMovement = movementCancelRef.current.has(petId);
+      if (hasActiveMovement && pet.currentAction !== "idle") {
+        pendingRestRef.current.add(petId);
+        return; // REST will be triggered in dispatchMovementAction's onComplete
+      }
+
+      // Pet is idle or no active animation — start REST immediately
+      const cancelMovement = movementCancelRef.current.get(petId);
+      if (cancelMovement) {
+        cancelMovement();
+        movementCancelRef.current.delete(petId);
+      }
+      beginRest(petId);
+    };
+
+    window.petmiiAPI.onRestCommand(handleRestCommand);
+    return () => {
+      // Cleanup: clear any active rest timers on unmount
+      for (const pet of petsRef.current) {
+        if (pet.restTimer) {
+          clearTimeout(pet.restTimer);
+        }
+      }
+    };
+  }, []);
+
+  function dispatchMovementAction(petId: string, action: ActionName) {
+    const pet = petsRef.current.find(p => p.id === petId);
+    if (!pet) return;
+
+    const profile = pet.resolvedProfile;
+    const maxX = getMaxX();
+    const minX = 0;
+    const groundY = getGroundY();
+    const resolvedRestY = computeResolvedRestY(groundY, profile);
+
+    let currentX = pet.x;
+    let dir = pet.direction as 1 | -1;
+
+    // Determine direction with wall detection
+    const atLeftWall = currentX <= minX + WALL_PADDING;
+    const atRightWall = currentX >= maxX - WALL_PADDING;
+
+    if (atLeftWall) {
+      dir = 1;
+    } else if (atRightWall) {
+      dir = -1;
+    } else if (Math.random() < 0.15) {
+      dir = -dir as 1 | -1;
+    }
+
+    let startX = currentX;
+    let startY = pet.y;
+    let targetX: number;
+    let targetY: number;
+
+    if (profile.movementStyle === "grounded") {
+      // Grounded movement: hop/leap arc
+      targetX = currentX + profile.stepDistance * dir;
+      // If target would hit a wall, flip direction
+      if (targetX <= minX || targetX >= maxX) {
+        dir = targetX <= minX ? 1 : -1;
+        targetX = currentX + profile.stepDistance * dir;
+      }
+      targetX = clamp(targetX, minX, maxX);
+      startY = resolvedRestY;
+      targetY = resolvedRestY;
+    } else {
+      // Floating movement: bob or drift
+      if (action === "drift") {
+        targetX = currentX + profile.stepDistance * dir;
+        if (targetX <= minX || targetX >= maxX) {
+          dir = targetX <= minX ? 1 : -1;
+          targetX = currentX + profile.stepDistance * dir;
+        }
+        targetX = clamp(targetX, minX, maxX);
+        startY = resolvedRestY;
+        targetY = resolvedRestY;
+      } else {
+        // bob: vertical oscillation, no horizontal movement
+        targetX = currentX;
+        startY = resolvedRestY;
+        targetY = resolvedRestY;
+      }
+    }
+
+    // Set currentAction and direction before starting animation
+    setPets(prev => prev.map(p =>
+      p.id === petId ? { ...p, currentAction: action, direction: dir } : p
+    ));
+
+    // Cancel any existing movement animation for this pet
+    const existingCancel = movementCancelRef.current.get(petId);
+    if (existingCancel) {
+      existingCancel();
+    }
+
+    // Start the movement animation
+    const cancel = animateMovementAction(
+      {
+        startX,
+        startY,
+        targetX,
+        targetY,
+        duration: Math.max(profile.duration, 100),
+        hopHeight: profile.hopHeight,
+        landingPauseMs: profile.landingPauseMs,
+        movementStyle: profile.movementStyle,
+      },
+      (x: number, y: number) => {
+        // onFrame: update position
+        setPets(prev => prev.map(p =>
+          p.id === petId && p.currentAction === action
+            ? { ...p, x, y }
+            : p
+        ));
+      },
+      () => {
+        // onComplete: check if REST is pending, otherwise return to idle
+        movementCancelRef.current.delete(petId);
+        if (pendingRestRef.current.has(petId)) {
+          pendingRestRef.current.delete(petId);
+          beginRest(petId);
+        } else {
+          setPets(prev => prev.map(p =>
+            p.id === petId
+              ? { ...p, currentAction: "idle" as ActionName }
+              : p
+          ));
+        }
+      }
+    );
+
+    movementCancelRef.current.set(petId, cancel);
+  }
 
   // Physics animation loop (for flying/gravity)
   useEffect(() => {
@@ -203,7 +1035,7 @@ export function OverlayApp() {
       setPets((prev) => {
         let changed = false;
         const next = prev.map((p) => {
-          if (!p.isFlying) return p;
+          if (p.physicsState !== "flying") return p;
           changed = true;
 
           let { x, y, vx, vy, rotation, angularVel } = p;
@@ -213,23 +1045,36 @@ export function OverlayApp() {
           rotation += angularVel;
           angularVel *= ANGULAR_DAMPING;
 
-          // Wall bounce
+          // Wall bounce (side walls)
+          let hitSideOrCeiling = false;
           if (x <= 0) {
             x = 0;
             vx = -vx * WALL_BOUNCE_DAMPING;
             angularVel *= -0.5;
+            hitSideOrCeiling = true;
           }
 
           if (x >= getMaxX()) {
             x = getMaxX();
             vx = -vx * WALL_BOUNCE_DAMPING;
             angularVel *= -0.5;
+            hitSideOrCeiling = true;
           }
 
           // Ceiling bounce
           if (y <= 0) {
             y = 0;
             vy = -vy * BOUNCE_DAMPING;
+            hitSideOrCeiling = true;
+          }
+
+          // Track wall collision for care history (side/ceiling only, NOT ground)
+          if (hitSideOrCeiling && throwSequenceRef.current && throwSequenceRef.current.petId === p.id && throwSequenceRef.current.active) {
+            const { incrementHardThrow, updatedState } = onWallCollision(throwSequenceRef.current);
+            throwSequenceRef.current = updatedState;
+            if (incrementHardThrow) {
+              window.petmiiAPI.careIncrement({ petId: p.id, action: "hardThrow" });
+            }
           }
 
           // Ground (y >= 0 means at bottom of container - pet height - padding)
@@ -239,6 +1084,10 @@ export function OverlayApp() {
             y = groundY;
 
             if (Math.abs(vy) < 2 && Math.abs(vx) < 1) {
+              // Pet has landed — reset throw sequence
+              if (throwSequenceRef.current && throwSequenceRef.current.petId === p.id) {
+                throwSequenceRef.current = null;
+              }
               return {
                 ...p,
                 x: clampX(x),
@@ -247,8 +1096,7 @@ export function OverlayApp() {
                 vy: 0,
                 rotation,
                 angularVel: 0,
-                isFlying: false,
-                isLanded: true,
+                physicsState: "landed" as PhysicsState,
               };
             }
 
@@ -260,10 +1108,7 @@ export function OverlayApp() {
           return { ...p, x, y, vx, vy, rotation, angularVel };
         });
 
-        // Handle landed → getting up transition (handled in separate useEffect)
-        const final = next;
-
-        return changed ? final : prev;
+        return changed ? next : prev;
       });
 
       animFrameRef.current = requestAnimationFrame(frame);
@@ -275,130 +1120,30 @@ export function OverlayApp() {
 
   // Handle landed pets getting back up
   useEffect(() => {
-    const landedPets = pets.filter((p) => p.isLanded);
+    const landedPets = pets.filter((p) => p.physicsState === "landed");
     for (const p of landedPets) {
       setTimeout(() => {
         setPets((prev) =>
           prev.map((pp) =>
-            pp.id === p.id && pp.isLanded
-              ? { ...pp, isLanded: false, isGettingUp: true }
+            pp.id === p.id && pp.physicsState === "landed"
+              ? { ...pp, physicsState: "gettingUp" as PhysicsState }
               : pp,
           ),
         );
         setTimeout(() => {
           setPets((prev) =>
-            prev.map((pp) =>
-              pp.id === p.id && pp.isGettingUp
-                ? { ...pp, isGettingUp: false, rotation: 0 }
-                : pp,
-            ),
+            prev.map((pp) => {
+              if (pp.id === p.id && pp.physicsState === "gettingUp") {
+                const restY = computeResolvedRestY(getGroundY(), pp.resolvedProfile);
+                return { ...pp, physicsState: "idle" as PhysicsState, rotation: 0, y: restY };
+              }
+              return pp;
+            }),
           );
         }, 800);
       }, 1200);
     }
-  }, [pets.filter((p) => p.isLanded).length]);
-
-  function triggerHop(petId: string) {
-    setPets((prev) =>
-      prev.map((p) => {
-        if (p.id !== petId) return p;
-
-        if (
-          p.isHopping ||
-          p.isDragging ||
-          p.isFlying ||
-          p.isLanded ||
-          p.isGettingUp
-        ) {
-          return p;
-        }
-
-        if (Math.random() < PAUSE_CHANCE) return p;
-
-        const maxX = Math.max(0, containerWidth - PET_RENDER_SIZE);
-        const minX = 0;
-
-        const groundY = getGroundY();
-        const currentX = clamp(p.x, minX, maxX);
-
-        const atLeftWall = currentX <= minX + WALL_PADDING;
-        const atRightWall = currentX >= maxX - WALL_PADDING;
-
-        let dir = p.direction as 1 | -1;
-
-        // Force pet to turn away from the wall
-        if (atLeftWall) {
-          dir = 1;
-        } else if (atRightWall) {
-          dir = -1;
-        } else if (Math.random() < 0.15) {
-          dir = -dir as 1 | -1;
-        }
-
-        let targetX = currentX + HOP_STEP_PX * dir;
-
-        // If the next hop would hit a wall, flip direction and hop away instead
-        if (targetX <= minX || targetX >= maxX) {
-          dir = targetX <= minX ? 1 : -1;
-          targetX = currentX + HOP_STEP_PX * dir;
-        }
-
-        targetX = clamp(targetX, minX, maxX);
-
-        console.log("hop direction:", dir, "from:", currentX, "to:", targetX);
-
-        animateHop(petId, currentX, targetX, groundY);
-
-        return {
-          ...p,
-          x: currentX,
-          direction: dir,
-          isHopping: true,
-        };
-      }),
-    );
-  }
-
-  function animateHop(
-    petId: string,
-    startX: number,
-    targetX: number,
-    groundY: number,
-  ) {
-    const startTime = Date.now();
-
-    function frame() {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / HOP_DURATION_MS, 1);
-
-      const easedProgress =
-        progress < 0.5
-          ? 2 * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-      const arcHeight = Math.sin(progress * Math.PI) * HOP_HEIGHT_PX;
-      const x = startX + (targetX - startX) * easedProgress;
-      const y = groundY - arcHeight;
-
-      setPets((prev) =>
-        prev.map((p) => (p.id === petId && p.isHopping ? { ...p, x, y } : p)),
-      );
-
-      if (progress < 1) {
-        requestAnimationFrame(frame);
-      } else {
-        setPets((prev) =>
-          prev.map((p) =>
-            p.id === petId
-              ? { ...p, x: targetX, y: groundY, isHopping: false }
-              : p,
-          ),
-        );
-      }
-    }
-
-    requestAnimationFrame(frame);
-  }
+  }, [pets.filter((p) => p.physicsState === "landed").length]);
 
   // ===== Drag handling =====
 
@@ -406,12 +1151,41 @@ export function OverlayApp() {
   const handleMouseDown = useCallback(
     (petId: string, e: React.MouseEvent) => {
       e.preventDefault();
+      // Suppress drag during evolution
+      const petState = petsRef.current.find(p => p.id === petId);
+      if (petState?.lifecycleState === "evolving") return;
       // If pet has egg notification, dismiss it
       const pet = pets.find((p) => p.id === petId);
       if (pet?.hasFoundEgg) {
         setPets((prev) =>
           prev.map((p) => (p.id === petId ? { ...p, hasFoundEgg: false } : p)),
         );
+      }
+      // Cancel any in-progress movement animation for this pet
+      const cancelMovement = movementCancelRef.current.get(petId);
+      if (cancelMovement) {
+        cancelMovement();
+        movementCancelRef.current.delete(petId);
+      }
+      // Clear any pending REST (user dragging takes priority)
+      pendingRestRef.current.delete(petId);
+      // If the pet was in approachCursor, notify controller to release slot and record cooldown
+      if (petState?.currentAction === "approachCursor" && cursorAttractionRef.current) {
+        notifyApproachEnded(cursorAttractionRef.current, petId);
+      }
+      // If the pet is resting, cancel the REST action
+      if (petState?.currentAction === "rest" && petState?.restTimer) {
+        clearTimeout(petState.restTimer);
+        // Notify main view that REST was interrupted — no stat benefit
+        window.petmiiAPI.sendRestEnded({ petId, completed: false });
+      }
+      // Cancel autonomousRest if active
+      if (petState?.currentAction === "autonomousRest") {
+        cancelAutonomousRest(petId);
+      }
+      // Cancel playTogether if active (ends session for BOTH pets)
+      if (petState?.currentAction === "playTogether") {
+        cancelPlayTogether(petId);
       }
       // Start drag immediately — no click/drag threshold
       dragState.current = {
@@ -420,9 +1194,22 @@ export function OverlayApp() {
         started: true,
         history: [{ x: e.clientX, y: e.clientY, t: Date.now() }],
       };
+
+      // Track pickedUp care action (client-side cooldown pre-check is optimization only)
+      const lastCountedAt = petState?.pet.careHistory?.metadata?.pickedUpLastCountedAt ?? null;
+      if (shouldCountPickup(lastCountedAt, Date.now())) {
+        window.petmiiAPI.careIncrement({ petId, action: "pickedUp" });
+      }
+
+      // Position pet centered on cursor immediately
+      const rect = containerRef.current?.getBoundingClientRect();
+      const renderSize = getPetRenderSize();
+      const newX = rect ? clampX(e.clientX - rect.left - renderSize / 2) : pet?.x ?? 0;
+      const newY = rect ? clampY(e.clientY - rect.top - renderSize / 2) : pet?.y ?? 0;
+
       setPets((prev) =>
         prev.map((p) =>
-          p.id === petId ? { ...p, isDragging: true, isHopping: false } : p,
+          p.id === petId ? { ...p, x: newX, y: newY, physicsState: "dragging" as PhysicsState, currentAction: "idle" as ActionName, visualState: "idle" as VisualState, restTimer: null } : p,
         ),
       );
     },
@@ -436,8 +1223,9 @@ export function OverlayApp() {
     // Move pet to cursor
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
-      const x = e.clientX - rect.left - PET_RENDER_SIZE / 2;
-      const y = e.clientY - rect.top - PET_RENDER_SIZE / 2;
+      const renderSize = getPetRenderSize();
+      const x = e.clientX - rect.left - renderSize / 2;
+      const y = e.clientY - rect.top - renderSize / 2;
 
         setPets((prev) =>
           prev.map((p) =>
@@ -459,6 +1247,7 @@ export function OverlayApp() {
   const handleMouseUp = useCallback(() => {
     const ds = dragState.current;
     if (!ds.petId) return;
+    const releasedPetId = ds.petId;
 
     if (ds.started) {
       // Calculate throw velocity
@@ -475,29 +1264,76 @@ export function OverlayApp() {
         }
       }
 
+      // Classify release for care history tracking
+      const releaseSpeed = Math.sqrt(vx * vx + vy * vy);
+      const { actions } = classifyRelease(releaseSpeed);
+      for (const action of actions) {
+        window.petmiiAPI.careIncrement({ petId: releasedPetId, action });
+      }
+
       const isThrown = Math.abs(vx) > 2 || Math.abs(vy) > 2;
       // Cap velocity to prevent extreme throws
       vx = Math.max(-15, Math.min(15, vx));
       vy = Math.max(-15, Math.min(15, vy));
-      const angularVel = isThrown ? vx * ANGULAR_VEL_FACTOR : 0;
 
-      setPets((prev) =>
-        prev.map((p) =>
-          p.id === ds.petId
-            ? {
-                ...p,
-                x: clampX(p.x),
-                y: clampY(p.y),
-                isDragging: false,
-                isFlying: true,
-                vx,
-                vy,
-                angularVel,
-              }
-            : p,
-        ),
-      );
-    } 
+      if (!isThrown) {
+        const pet = petsRef.current.find(p => p.id === ds.petId);
+        if (pet) {
+          const restY = computeResolvedRestY(getGroundY(), pet.resolvedProfile);
+          const heightAboveRest = restY - pet.y;
+
+          if (heightAboveRest > AIR_RELEASE_THRESHOLD_PX) {
+            // Air release — enter flying with zero velocity, gravity does the rest
+            setPets((prev) =>
+              prev.map((p) =>
+                p.id === ds.petId
+                  ? { ...p, physicsState: "flying" as PhysicsState, x: clampX(p.x), vx: 0, vy: 0, angularVel: 0 }
+                  : p,
+              ),
+            );
+          } else {
+            // Ground-level release — snap to rest (existing behavior)
+            setPets((prev) =>
+              prev.map((p) =>
+                p.id === ds.petId
+                  ? { ...p, physicsState: "idle" as PhysicsState, x: clampX(p.x), y: restY, vx: 0, vy: 0, angularVel: 0, rotation: 0 }
+                  : p,
+              ),
+            );
+          }
+        }
+        throwSequenceRef.current = null;
+      } else {
+        // High velocity — enter throw flight
+        const angularVel = vx * ANGULAR_VEL_FACTOR;
+        setPets((prev) =>
+          prev.map((p) =>
+            p.id === ds.petId
+              ? {
+                  ...p,
+                  x: clampX(p.x),
+                  y: clampY(p.y),
+                  physicsState: "flying" as PhysicsState,
+                  vx,
+                  vy,
+                  angularVel,
+                }
+              : p,
+          ),
+        );
+
+        // Start throw sequence tracking if speed meets threshold
+        if (releaseSpeed >= THROW_SPEED_THRESHOLD) {
+          const seqState = createThrowSequenceState(releasedPetId);
+          throwSequenceRef.current = {
+            ...seqState,
+            hardThrowCounted: actions.includes("hardThrow"),
+          };
+        } else {
+          throwSequenceRef.current = null;
+        }
+      }
+    }
 
     dragState.current = {
       petId: null,
@@ -515,16 +1351,26 @@ export function OverlayApp() {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {pets.map((p) => (
+      {pets.map((p) => {
+        const evolutionStyles = evolutionAnimRef.current?.petId === p.id
+          ? computeEvolutionStyles(Date.now() - evolutionAnimRef.current.startedAt)
+          : null;
+
+        return (
         <div
           key={p.id}
-          className={`overlay-pet ${p.isDragging ? "dragging" : ""} ${p.isFlying ? "physics-flying" : ""} ${p.isLanded ? "physics-landed" : ""} ${p.isGettingUp ? "physics-getting-up" : ""}`}
+          className={`overlay-pet ${p.physicsState === "dragging" ? "dragging" : ""} ${p.physicsState === "flying" ? "physics-flying" : ""} ${p.physicsState === "landed" ? "physics-landed" : ""} ${p.physicsState === "gettingUp" ? "physics-getting-up" : ""} ${p.isLeaving ? "leaving" : ""}`}
           style={{
             position: "absolute",
+            width: `${getPetRenderSize()}px`,
+            height: `${getPetRenderSize()}px`,
             left: `${p.x}px`,
             top: `${p.y}px`,
-            transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
-            transition: p.isGettingUp
+            transform: [
+              p.rotation ? `rotate(${p.rotation}deg)` : "",
+              evolutionStyles ? `scale(${parseScaleFromTransform(evolutionStyles.transform)})` : "",
+            ].filter(Boolean).join(" ") || undefined,
+            transition: p.physicsState === "gettingUp"
               ? "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)"
               : undefined,
           }}
@@ -550,7 +1396,7 @@ export function OverlayApp() {
           </div>
 
           {/* Egg found notification */}
-          {!p.isFlying && !p.isLanded && p.hasFoundEgg && (
+          {p.physicsState !== "flying" && p.physicsState !== "landed" && p.hasFoundEgg && (
             <div className="overlay-egg-found">!</div>
           )}
 
@@ -558,50 +1404,63 @@ export function OverlayApp() {
           {
             <LowStatAlerts
               pet={p.pet}
-              isFlying={p.isFlying}
-              isLanded={p.isLanded}
+              physicsState={p.physicsState}
+              lifecycleState={p.lifecycleState}
             />
           }
 
           {/* Pet sprite */}
-          <div className="overlay-pet-body">
-            <div
-              style={{
-                transform:
-                  p.direction === -1 && !p.isFlying ? "scaleX(-1)" : undefined,
-              }}
-            >
-              <PetAvatar
-                species={p.pet.species}
-                color={p.pet.color}
-                personality={p.pet.personality}
-                lifeStage={p.pet.lifeStage}
-              />
-            </div>
+          <div
+            className={`overlay-pet-body${burstingPets.has(p.id) ? " play-together-burst" : ""}`}
+            style={{
+              width: `${PET_BASE_SIZE}px`,
+              height: `${PET_BASE_SIZE}px`,
+              marginLeft: `-${PET_BASE_SIZE / 2}px`,
+              transform: `scale(${petScale})${p.direction === -1 && p.physicsState !== "flying" ? " scaleX(-1)" : ""}`,
+              filter: evolutionStyles ? evolutionStyles.filter : undefined,
+              opacity: evolutionStyles ? evolutionStyles.opacity : undefined,
+            }}
+          >
+            <PetAvatar
+              species={p.pet.species}
+              variantId={resolveVariantId(p.pet)}
+              personality={p.pet.personality}
+              lifeStage={p.pet.lifeStage}
+              visualState={p.visualState}
+            />
           </div>
 
           {/* Speech bubble */}
-          {p.message && !p.isFlying && !p.isLanded && (
+          {p.message && p.physicsState !== "flying" && p.physicsState !== "landed" && p.lifecycleState !== "evolving" && (
             <div className="overlay-speech">
               <span>{p.message}</span>
             </div>
           )}
+
+          {/* playTogether sparkle indicator */}
+          {p.currentAction === "playTogether" && p.physicsState !== "flying" && playTogetherIcon && (
+            <div className="overlay-play-together-indicator">{playTogetherIcon}</div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
 function LowStatAlerts({
   pet,
-  isFlying,
-  isLanded,
+  physicsState,
+  lifecycleState,
 }: {
   pet: PetState;
-  isFlying: boolean;
-  isLanded: boolean;
+  physicsState: PhysicsState;
+  lifecycleState: LifecycleState;
 }) {
-  if (isFlying || isLanded) {
+  if (physicsState === "flying" || physicsState === "landed") {
+    return;
+  }
+  if (lifecycleState === "evolving") {
     return;
   }
   const alerts: string[] = [];
@@ -621,27 +1480,46 @@ function LowStatAlerts({
   );
 }
 
-function createPetState(pet: PetState, screenWidth: number): PetOverlayState {
-  const groundY = window.innerHeight - PET_RENDER_SIZE - GROUND_OFFSET_PX;
+function applyRestAction(pet: PetState): PetState {
+  const now = new Date().toISOString();
+  const AMOUNT = 25;
+  const BOND = 2;
+  return {
+    ...pet,
+    energy: clamp(pet.energy + AMOUNT, 0, 100),
+    hunger: clamp(pet.hunger - 5, 0, 100),
+    bond: clamp(pet.bond + BOND, 0, 100),
+    lastRestedAt: now,
+    updatedAt: now,
+  };
+}
+
+function createPetState(pet: PetState, screenWidth: number, scale = DEFAULT_PET_SCALE): PetOverlayState {
+  const renderSize = PET_BASE_SIZE * scale;
+  const groundY = window.innerHeight - renderSize - GROUND_OFFSET_PX;
+  const profile = resolveProfile(pet.species, pet.lifeStage, MOVEMENT_PROFILES);
+  const restY = computeResolvedRestY(groundY, profile);
 
   return {
     id: pet.id,
     pet,
-    x: Math.random() * Math.max(0, screenWidth - PET_RENDER_SIZE),
-    y: groundY,
+    x: Math.random() * Math.max(0, screenWidth - renderSize),
+    y: restY,
     vx: 0,
     vy: 0,
     rotation: 0,
     angularVel: 0,
     direction: Math.random() > 0.5 ? 1 : -1,
-    isHopping: false,
-    isDragging: false,
-    isFlying: false,
-    isLanded: false,
-    isGettingUp: false,
+    currentAction: "idle",
+    physicsState: "idle",
+    visualState: "idle",
+    lifecycleState: "normal",
+    resolvedProfile: profile,
+    restTimer: null,
     message: null,
     messageTimer: null,
     hasFoundEgg: false,
     isHovered: false,
+    isLeaving: false,
   };
 }

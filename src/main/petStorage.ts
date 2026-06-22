@@ -12,6 +12,7 @@ import type {
   PetMood,
   PetLifeStage,
 } from "../renderer/pet/petVariant";
+import { createDefaultCareHistory, type AdultTrait } from "../shared/pet/careHistory";
 
 // ===== Types =====
 
@@ -22,6 +23,10 @@ export interface Egg {
   foundAt: string;
   hatchAt: string;
   foundBy: string;
+  status?: "found" | "incubating" | "readyToHatch";
+  incubationStartedAt?: string;
+  incubationDurationMs?: number;
+  hatchesAt?: string;
 }
 
 export interface GameState {
@@ -30,6 +35,7 @@ export interface GameState {
   graveyard: GraveyardEntry[];
   settings: {
     overlayPets: string[];
+    petScale: number;
   };
 }
 
@@ -48,18 +54,17 @@ export interface GraveyardEntry {
 
 const GAME_STATE_FILENAME = "game-state.json";
 const OLD_PET_STATE_FILENAME = "pet-state.json";
-const MAX_PETS = 6;
+const MAX_PETS = 10;
 const MAX_EGGS = 3;
 const MAX_OVERLAY_PETS = 4;
 
-// (normal: blob:6, star:12, frog:4)
+// (normal: blob:6, frog:4)
 export const EGG_HATCH_HOURS: Record<PetSpecies, number> = {
   blob: 0.5,
-  star: 1,
   frog: 0.7,
 };
 
-const VALID_SPECIES: PetSpecies[] = ["blob", "star", "frog"];
+const VALID_SPECIES: PetSpecies[] = ["blob", "frog"];
 const VALID_COLORS: PetColor[] = ["yellow", "blue", "pink", "shiny"];
 const VALID_PERSONALITIES: PetPersonality[] = [
   "sweet",
@@ -147,6 +152,7 @@ function createDefaultGameState(): GameState {
     graveyard: [],
     settings: {
       overlayPets: [],
+      petScale: 1.5,
     },
   };
 }
@@ -197,6 +203,43 @@ function migrateFromOldFormat(): GameState | null {
   }
 }
 
+// ===== Care History Migration =====
+
+/**
+ * Migrates a pet's care history fields if missing.
+ * - Adds default empty CareHistory if careHistory is undefined/null.
+ * - Assigns "Classic" adult trait to adult pets missing adultTrait.
+ * Does NOT modify any existing fields.
+ */
+function migratePetCareFields(pet: PetState): void {
+  if (pet.careHistory === undefined || pet.careHistory === null) {
+    pet.careHistory = createDefaultCareHistory();
+  }
+  if (pet.lifeStage === "adult" && !pet.adultTrait) {
+    pet.adultTrait = "Classic";
+  }
+}
+
+// ===== Egg Status Normalization =====
+
+/**
+ * Normalizes egg statuses based on wall-clock time.
+ * - If status is missing (old eggs), defaults to "found"
+ * - If status is "incubating" and current time >= hatchesAt, flips to "readyToHatch"
+ */
+export function normalizeEggStatus(eggs: Egg[]): void {
+  const now = Date.now();
+  for (const egg of eggs) {
+    if (!egg.status) {
+      egg.status = "found";
+    } else if (egg.status === "incubating" && egg.hatchesAt) {
+      if (now >= new Date(egg.hatchesAt).getTime()) {
+        egg.status = "readyToHatch";
+      }
+    }
+  }
+}
+
 // ===== Core Load/Save =====
 
 /**
@@ -221,8 +264,13 @@ export function loadGameState(): GameState {
             overlayPets: Array.isArray(parsed.settings?.overlayPets)
               ? parsed.settings.overlayPets
               : [],
+            petScale: typeof parsed.settings?.petScale === "number"
+              ? parsed.settings.petScale
+              : 1.5,
           },
         };
+        state.pets.forEach(migratePetCareFields);
+        normalizeEggStatus(state.eggs);
         return state;
       }
     }
@@ -230,6 +278,8 @@ export function loadGameState(): GameState {
     // Try migrating from old format
     const migrated = migrateFromOldFormat();
     if (migrated) {
+      migrated.pets.forEach(migratePetCareFields);
+      normalizeEggStatus(migrated.eggs);
       saveGameState(migrated);
       return migrated;
     }
@@ -335,7 +385,7 @@ export function removePet(petId: string): boolean {
     (id) => id !== petId,
   );
 
-  // Add to graveyard
+  // Add to graveyard (keep only the latest 10)
   game.graveyard.push({
     id: pet.id,
     name: pet.name,
@@ -346,6 +396,7 @@ export function removePet(petId: string): boolean {
     hatchedAt: pet.hatchedAt,
     diedAt: pet.diedAt || new Date().toISOString(),
   });
+  game.graveyard = game.graveyard.slice(-10);
 
   return saveGameState(game);
 }
@@ -372,6 +423,18 @@ export function removeEgg(eggId: string): Egg | null {
   game.eggs = game.eggs.filter((e) => e.id !== eggId);
   saveGameState(game);
   return egg;
+}
+
+/**
+ * Updates a single egg in the game state array and saves.
+ * Patches the egg with the provided updates.
+ */
+export function updateEgg(eggId: string, updates: Partial<Egg>): boolean {
+  const game = loadGameState();
+  const idx = game.eggs.findIndex((e) => e.id === eggId);
+  if (idx < 0) return false;
+  game.eggs[idx] = { ...game.eggs[idx], ...updates };
+  return saveGameState(game);
 }
 
 /**

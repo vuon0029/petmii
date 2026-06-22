@@ -45,9 +45,10 @@ export function NamePetScreen({ variant, onNameSubmit }: NamePetScreenProps) {
       <div className="name-pet-preview">
         <PetAvatar
           species={variant.species}
-          color={variant.color}
+          variantId={variant.color}
           personality={variant.personality}
           lifeStage={variant.lifeStage}
+          visualState="idle"
           static
         />
       </div>

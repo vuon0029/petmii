@@ -10,6 +10,10 @@ export interface Egg {
   foundAt: string;
   hatchAt: string;
   foundBy: string;
+  status?: "found" | "incubating" | "readyToHatch";
+  incubationStartedAt?: string;
+  incubationDurationMs?: number;
+  hatchesAt?: string;
 }
 
 export interface GameState {
@@ -18,6 +22,7 @@ export interface GameState {
   graveyard: GraveyardEntry[];
   settings: {
     overlayPets: string[];
+    petScale: number;
   };
 }
 
@@ -99,12 +104,44 @@ declare global {
       onAllPetsDied(callback: (pet: PetState) => void): void;
       onEggFound(callback: (data: { finder: PetState; egg: Egg }) => void): void;
 
+      // Egg notification clearing
+      clearEggNotifications(): void;
+      onClearEggNotifications(callback: () => void): void;
+
+      // REST action (overlay) — main view sends rest command and listens for completion
+      startOverlayRest(data: { petId: string }): void;
+      isRestingInOverlay(petId: string): Promise<boolean>;
+      onRestEnded(callback: (data: { petId: string; completed: boolean }) => void): void;
+      // REST action IPC — overlay listens for rest command and sends completion
+      onRestCommand(callback: (data: { petId: string }) => void): void;
+      sendRestEnded(data: { petId: string; completed: boolean }): void;
+
       // Graveyard
       loadGraveyard(): Promise<GraveyardEntry[]>;
       removeFromGraveyard(id: string): Promise<boolean>;
 
+      // Care History
+      careIncrement(payload: { petId: string; action: string; metadata?: unknown }): Promise<{ success: boolean; reason?: string }>;
+
+      // Evolution
+      evolveStart(payload: { petId: string; sessionId: string }): void;
+      evolveMidpoint(payload: { petId: string; sessionId: string }): void;
+      onEvolveStart(callback: (data: { petId: string; sessionId: string; targetStage: string }) => void): void;
+      onEvolveComplete(callback: (data: { petId: string; newStage: string; adultTrait: string | null }) => void): void;
+      onEvolveRejected(callback: (data: { petId: string; sessionId: string }) => void): void;
+
+      // Autonomous Actions
+      sendAutonomousActionStarted(data: { petId: string; action: string }): void;
+      sendAutonomousActionEnded(data: { petId: string; action: string }): void;
+      onAutonomousActionStarted(callback: (data: { petId: string; action: string }) => void): void;
+      onAutonomousActionEnded(callback: (data: { petId: string; action: string }) => void): void;
+      isAutonomousActionActive(petId: string): Promise<boolean>;
+
       // System
       getSystemMetrics(): Promise<SystemMetrics>;
+
+      // Cursor position (for cursor attraction controller)
+      getCursorPosition(): Promise<{ x: number; y: number }>;
     };
   }
 }

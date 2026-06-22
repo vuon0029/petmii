@@ -123,8 +123,9 @@
   font-size: 0.85rem;
 }
 
-.pet-details-next-stage {
-  color: #4caf50;
+.pet-details-next-stage .pet-details-evolve-btn {
+  background-color: #4caf50;
+  color: #ffff;
   font-weight: 500;
   font-size: 0.85rem;
 }
@@ -204,4 +205,27 @@
 .pet-details-actions button {
   padding: 10px 20px;
   font-size: 0.9rem;
+}
+
+/* Personality Notes */
+.personality-notes {
+  width: 100%;
+  max-width: 300px;
+  text-align: center;
+  padding: 4px 0;
+}
+
+.personality-note-line {
+  font-size: 0.78rem;
+  font-style: italic;
+  color: #9a7dbf;
+  margin: 2px 0;
+  line-height: 1.4;
+}
+
+/* Evolution countdown text */
+.pet-details-next-stage-countdown {
+  color: #7c4dff;
+  font-size: 0.8rem;
+  font-style: italic;
 }

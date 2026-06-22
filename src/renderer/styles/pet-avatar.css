@@ -3,15 +3,11 @@
 /* ===== Sprite-based avatar (matches tutorial approach) ===== */
 
 .pet-avatar-container {
-  width: 48px;
-  height: 48px;
   overflow: hidden;
   position: relative;
   image-rendering: pixelated;
-  background-size: 240px 48px; /* 5 frames × 48px */
   background-repeat: no-repeat;
   background-position: 0 0;
-  animation: moveSpritesheet 1.3s steps(5) infinite;
   /* Prevent this element from affecting input focus */
   pointer-events: none;
   contain: strict;
@@ -19,7 +15,7 @@
 
 /* Static mode — show first frame only */
 .pet-avatar-container.pet-avatar-static {
-  animation: none;
+  animation: none !important;
   background-position: 0 0;
 }
 
@@ -27,12 +23,18 @@
   image-rendering: pixelated;
 }
 
+/*
+ * Spritesheet animation keyframe.
+ * Uses a CSS custom property --sprite-sheet-width for the total sheet width.
+ * The container sets this variable via inline style.
+ * We animate from the first frame to one full sheet width to the left.
+ */
 @keyframes moveSpritesheet {
   from {
     background-position: 0 0;
   }
   to {
-    background-position: -240px 0;
+    background-position: var(--sprite-end-pos, -240px) 0;
   }
 }
 
@@ -53,21 +55,6 @@
 
 .pet-species-blob {
   border-radius: 60% 40% 50% 70% / 50% 60% 40% 50%;
-}
-
-.pet-species-star {
-  clip-path: polygon(
-    50% 0%,
-    61% 35%,
-    98% 35%,
-    68% 57%,
-    79% 91%,
-    50% 70%,
-    21% 91%,
-    32% 57%,
-    2% 35%,
-    39% 35%
-  );
 }
 
 /* Color classes */

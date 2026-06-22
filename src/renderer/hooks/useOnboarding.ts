@@ -29,6 +29,7 @@ export function useOnboarding() {
             species: saved.species,
             color: saved.color,
             personality: saved.personality,
+            lifeStage: saved.lifeStage,
           });
           setState("ACTIVE_PET");
         } else {

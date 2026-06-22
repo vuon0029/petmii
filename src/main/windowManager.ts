@@ -18,7 +18,7 @@ let overlayVisible = false;
 export function createMainWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 500,
-    height: 780,
+    height: 880,
     title: "petmii",
     icon: APP_ICON,
     resizable: true,

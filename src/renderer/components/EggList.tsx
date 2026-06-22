@@ -1,38 +1,107 @@
-import { useState, useEffect } from "react";
-import type { Egg } from "../types";
+import { useState, useEffect, useRef } from "react";
+import type { Egg, GameState } from "../types";
 import type { PetState } from "../pet/petVariant";
 import eggImage from "../assets/default_egg.png";
 import "../styles/egg-list.css";
+
+// Replicated from petStorage.ts (main process only) — keep in sync
+const EGG_HATCH_HOURS: Record<string, number> = {
+  blob: 0.5,
+  frog: 0.7,
+};
 
 interface EggListProps {
   eggs: Egg[];
   onHatch: (eggId: string) => void;
   onDiscard: (eggId: string) => void;
   pets?: PetState[];
+  onGameUpdate?: (game: GameState) => void;
 }
 
-export function EggList({ eggs, onHatch, onDiscard, pets = [] }: EggListProps) {
-  const [now, setNow] = useState(Date.now());
-  const [incubating, setIncubating] = useState<Set<string>>(new Set());
+/**
+ * Normalize egg statuses based on wall-clock time.
+ * If an egg is "incubating" and the current time is past hatchesAt, treat it as "readyToHatch".
+ */
+function normalizeEggs(eggs: Egg[]): Egg[] {
+  const now = Date.now();
+  return eggs.map((egg) => {
+    if (egg.status === "incubating" && egg.hatchesAt) {
+      if (now >= new Date(egg.hatchesAt).getTime()) {
+        return { ...egg, status: "readyToHatch" as const };
+      }
+    }
+    return egg;
+  });
+}
 
+export function EggList({ eggs, onHatch, onDiscard, pets = [], onGameUpdate }: EggListProps) {
+  const [now, setNow] = useState(Date.now());
+  const [normalizedEggs, setNormalizedEggs] = useState<Egg[]>(() => normalizeEggs(eggs));
+  const prevEggsRef = useRef(eggs);
+
+  // Normalize eggs on mount and when eggs prop changes
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    setNormalizedEggs(normalizeEggs(eggs));
+    prevEggsRef.current = eggs;
+  }, [eggs]);
+
+  // UI countdown timer — refreshes display only, not source of truth
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      // Re-normalize in case any eggs have elapsed during the interval
+      setNormalizedEggs(normalizeEggs(prevEggsRef.current));
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  function handleStartIncubation(eggId: string) {
-    setIncubating(prev => new Set(prev).add(eggId));
+  async function handleStartIncubation(eggId: string) {
+    const egg = eggs.find((e) => e.id === eggId);
+    if (!egg) return;
+
+    const hours = EGG_HATCH_HOURS[egg.species] ?? 0.5;
+    const durationMs = hours * 60 * 60 * 1000;
+    const incubationStartedAt = new Date().toISOString();
+    const hatchesAt = new Date(Date.now() + durationMs).toISOString();
+
+    // Load current game state, update the egg, and save
+    const game = await window.petmiiAPI.loadGame();
+    const updatedEggs = game.eggs.map((e) =>
+      e.id === eggId
+        ? {
+            ...e,
+            status: "incubating" as const,
+            incubationStartedAt,
+            incubationDurationMs: durationMs,
+            hatchesAt,
+          }
+        : e,
+    );
+
+    const updatedGame: GameState = { ...game, eggs: updatedEggs };
+    await window.petmiiAPI.saveGame(updatedGame);
+
+    // Update local normalized view immediately
+    setNormalizedEggs(normalizeEggs(updatedEggs));
+
+    // Notify parent so it can refresh its game state
+    if (onGameUpdate) {
+      onGameUpdate(updatedGame);
+    }
   }
 
   return (
     <div className="egg-list">
-      <h3 className="egg-list-title">Eggs ({eggs.length}/3)</h3>
+      <h3 className="egg-list-title">Eggs ({normalizedEggs.length}/3)</h3>
       <div className="egg-list-items">
-        {eggs.map((egg) => {
-          const hatchTime = new Date(egg.hatchAt).getTime();
-          const remaining = hatchTime - now;
-          const isReady = remaining <= 0;
-          const isIncubating = incubating.has(egg.id);
+        {normalizedEggs.map((egg) => {
+          const isReady = egg.status === "readyToHatch";
+          const isIncubating = egg.status === "incubating";
+
+          // Compute remaining time from persisted hatchesAt
+          const remaining = isIncubating && egg.hatchesAt
+            ? new Date(egg.hatchesAt).getTime() - now
+            : 0;
 
           return (
             <div key={egg.id} className={`egg-item ${isReady ? "egg-item-ready" : ""}`}>

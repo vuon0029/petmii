@@ -18,25 +18,19 @@ body {
   pointer-events: none;
 }
 
-/* Individual pet wrapper — captures clicks */
+/* Individual pet wrapper — size set via inline style from PET_RENDER_SIZE */
 .overlay-pet {
   position: absolute;
-  width: 72px;
-  height: 72px;
   overflow: visible;
   pointer-events: auto;
 }
 
+/* Pet body — size and scale set via inline style from PET_BASE_SIZE / PET_SCALE */
 .overlay-pet-body {
   position: absolute;
-  left: 0;
+  left: 50%;
   bottom: 0;
-  width: 48px;
-  height: 48px;
-  transform: scale(1.5);
-  opacity: 0.7;
-  transform-origin: bottom left;
-
+  transform-origin: bottom center;
   cursor: pointer;
 }
 /* .overlay-pet {
@@ -52,7 +46,7 @@ body {
 } */
 
 .overlay-pet:hover {
-  filter: brightness(1.2);
+  filter: brightness(1.05);
 }
 
 .overlay-pet-body.dragging {
@@ -199,5 +193,72 @@ body {
   }
   50% {
     transform: translateY(-4px);
+  }
+}
+
+/* Pet leaving animation (release/death) */
+.overlay-pet.leaving {
+  animation: pet-leave 1.2s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes pet-leave {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-80px);
+  }
+}
+
+/* playTogether burst hop — one-shot, applied/removed per burst */
+.overlay-pet-body.play-together-burst {
+  animation: play-together-burst 500ms ease-out forwards;
+}
+
+@keyframes play-together-burst {
+  0% {
+    translate: 0 0;
+  }
+  40% {
+    translate: 0 -5px;
+  }
+  100% {
+    translate: 0 0;
+  }
+}
+
+/* playTogether sparkle effect */
+.play-together-sparkle {
+  position: absolute;
+  pointer-events: none;
+  font-size: 1.5rem;
+  animation: sparkle-pulse 1.5s ease-in-out infinite;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+}
+
+/* playTogether per-pet sparkle indicator */
+.overlay-play-together-indicator {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  font-size: 1rem;
+  pointer-events: none;
+  animation: sparkle-pulse 1.5s ease-in-out infinite;
+  z-index: 10;
+}
+
+@keyframes sparkle-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.3);
   }
 }

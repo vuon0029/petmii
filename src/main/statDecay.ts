@@ -20,7 +20,7 @@ import { hideOverlay, restoreMainWindow } from "./windowManager";
 const DECAY_TICK_MS = 60_000; // every 60 seconds
 
 // Egg discovery check interval
-const EGG_CHECK_INTERVAL_TICKS = 60;
+const EGG_CHECK_INTERVAL_TICKS = 1;
 
 // Base decay rates (points per hour)
 const BASE_DECAY = {
@@ -42,14 +42,14 @@ const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
 };
 
 // Egg discovery config
-const EGG_DAILY_CHANCE = 0.3; // 15% per day
-const EGG_HOURLY_CHANCE = EGG_DAILY_CHANCE / 24;
+const EGG_DAILY_CHANCE = 1; // TESTING — not used directly when override below is active
+const EGG_HOURLY_CHANCE = 0.45; // TESTING: ~95% chance to find egg within 5 minutes (5 ticks)
 const HEALTHY_STAT_THRESHOLD = 60;
 const MAX_EGGS = 3;
-const SHINY_EGG_CHANCE = 1 / 100;
+const SHINY_EGG_CHANCE = 1 / 200;
 const SAME_SPECIES_WEIGHT = 2; // 2x more likely to find same species egg
 
-const ALL_SPECIES: PetSpecies[] = ["blob", "star", "frog"];
+const ALL_SPECIES: PetSpecies[] = ["blob", "frog"];
 
 let decayInterval: ReturnType<typeof setInterval> | null = null;
 let tickCount = 0;
@@ -99,7 +99,7 @@ function tickDecay(): void {
     }
   }
 
-  // Handle deaths — remove dead pets, add to graveyard
+  // Handle deaths — remove dead pets, add to graveyard (keep only the latest 10)
   for (const deadPet of deaths) {
     game.pets = game.pets.filter((p) => p.id !== deadPet.id);
     game.settings.overlayPets = game.settings.overlayPets.filter(
@@ -116,6 +116,7 @@ function tickDecay(): void {
       diedAt: deadPet.diedAt || new Date().toISOString(),
     });
   }
+  game.graveyard = game.graveyard.slice(-10);
 
   // Egg discovery check (once per hour)
   tickCount++;
@@ -378,31 +379,15 @@ function applyDecayForHours(pet: PetState, hours: number): PetState {
   return state;
 }
 
+/**
+ * Life stage progression check — previously auto-advanced lifeStage.
+ * Now a no-op: evolution is manual (user clicks Evolve button).
+ * Evolution readiness is derived by getEvolutionReadiness() in src/shared/pet/evolutionReadiness.ts.
+ */
 function checkLifeStageProgression(pet: PetState): PetState {
-  if (!pet.isAlive) return pet;
-
-  const speciesTraits = SPECIES_TRAITS[pet.species];
-  const ageHours =
-    (Date.now() - new Date(pet.hatchedAt).getTime()) / (1000 * 60 * 60);
-  const canEvolve = pet.hunger > 20;
-
-  if (
-    pet.lifeStage === "baby" &&
-    ageHours >= speciesTraits.stages.babyToChild &&
-    canEvolve
-  ) {
-    return { ...pet, lifeStage: "child", lastMessage: "I feel smarter~!" };
-  }
-
-  if (
-    pet.lifeStage === "child" &&
-    ageHours >=
-      speciesTraits.stages.babyToChild + speciesTraits.stages.childToAdult &&
-    canEvolve
-  ) {
-    return { ...pet, lifeStage: "adult", lastMessage: "Look at me now!" };
-  }
-
+  // Automatic life-stage mutation removed.
+  // Evolution is now user-initiated via the Evolve button in the UI.
+  // The getEvolutionReadiness() function determines when a pet is ready to evolve.
   return pet;
 }
 

@@ -3,7 +3,7 @@
 
 import { PetSpecies, PetColor, PetPersonality, PetVariant } from "./petVariant";
 
-export const SPECIES: PetSpecies[] = ["blob", "star", "frog"];
+export const SPECIES: PetSpecies[] = ["blob", "frog"];
 export const COLORS: PetColor[] = ["yellow", "blue", "pink"];
 export const PERSONALITIES: PetPersonality[] = [
   "sweet",
@@ -14,7 +14,7 @@ export const PERSONALITIES: PetPersonality[] = [
   "sassy",
 ];
 
-const SHINY_CHANCE = 1 / 100;
+const SHINY_CHANCE = 1 / 200;
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];

@@ -1,7 +1,9 @@
 // src/renderer/pet/petVariant.ts
 // Type definitions and constants for pet variants, state, and defaults.
 
-export type PetSpecies = "blob" | "star" | "frog";
+import type { CareHistory, AdultTrait } from "../../shared/pet/careHistory";
+
+export type PetSpecies = "blob" | "frog";
 export type PetColor = "yellow" | "blue" | "pink" | "shiny";
 export type PetPersonality =
   | "sweet"
@@ -63,6 +65,10 @@ export interface PetState {
   diedAt: string | null;
   createdAt: string;
   updatedAt: string;
+
+  // Care history and evolution
+  careHistory?: CareHistory;
+  adultTrait?: AdultTrait;
 }
 
 export const DEFAULT_PET_STATS = {
@@ -86,6 +92,5 @@ export const DEFAULT_PET_STATS = {
 
 export const SPECIES_DEFAULT_NAMES: Record<PetSpecies, string> = {
   blob: "Bob",
-  star: "Striker",
   frog: "Ribbon",
 };

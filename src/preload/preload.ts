@@ -22,6 +22,10 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
 
   // Egg operations
   hatchEgg: (eggId: string) => ipcRenderer.invoke("egg:hatch", eggId),
+  clearEggNotifications: () => ipcRenderer.send("egg:clear-notifications"),
+  onClearEggNotifications: (callback: () => void) => {
+    ipcRenderer.on("egg:clear-notifications", () => callback());
+  },
 
   // Overlay settings
   getOverlayPets: () => ipcRenderer.invoke("overlay:get-pets"),
@@ -67,9 +71,57 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
     ipcRenderer.on("egg:found", (_, data) => callback(data));
   },
 
+  // REST action (overlay) — main view sends rest command and listens for completion
+  startOverlayRest: (data: { petId: string }) => ipcRenderer.send("pet:rest-start", data),
+  isRestingInOverlay: (petId: string) => ipcRenderer.invoke("pet:is-resting", petId) as Promise<boolean>,
+  onRestEnded: (callback: (data: { petId: string; completed: boolean }) => void) => {
+    ipcRenderer.on("pet:rest-ended", (_, data) => callback(data));
+  },
+
+  // REST action IPC — overlay listens for rest command and sends completion
+  onRestCommand: (callback: (data: { petId: string }) => void) => {
+    ipcRenderer.on("overlay:rest-command", (_, data) => callback(data));
+  },
+  sendRestEnded: (data: { petId: string; completed: boolean }) => {
+    ipcRenderer.send("pet:rest-ended", data);
+  },
+
   // Graveyard
   loadGraveyard: () => ipcRenderer.invoke("graveyard:load"),
   removeFromGraveyard: (id: string) => ipcRenderer.invoke("graveyard:remove", id),
+
+  // Care History
+  careIncrement: (payload: { petId: string; action: string; metadata?: unknown }) =>
+    ipcRenderer.invoke("care:increment", payload),
+
+  // Evolution
+  evolveStart: (payload: { petId: string; sessionId: string }) =>
+    ipcRenderer.send("evolve:start", payload),
+  evolveMidpoint: (payload: { petId: string; sessionId: string }) =>
+    ipcRenderer.send("evolve:midpoint", payload),
+  onEvolveStart: (callback: (data: unknown) => void) => {
+    ipcRenderer.on("evolve:start", (_, data) => callback(data));
+  },
+  onEvolveComplete: (callback: (data: unknown) => void) => {
+    ipcRenderer.on("evolve:complete", (_, data) => callback(data));
+  },
+  onEvolveRejected: (callback: (data: unknown) => void) => {
+    ipcRenderer.on("evolve:rejected", (_, data) => callback(data));
+  },
+
+  // Autonomous Actions — overlay notifies main view when autonomous actions start/end
+  sendAutonomousActionStarted: (data: { petId: string; action: string }) => ipcRenderer.send("pet:autonomous-action-started", data),
+  sendAutonomousActionEnded: (data: { petId: string; action: string }) => ipcRenderer.send("pet:autonomous-action-ended", data),
+  onAutonomousActionStarted: (callback: (data: { petId: string; action: string }) => void) => {
+    ipcRenderer.on("pet:autonomous-action-started", (_, data) => callback(data));
+  },
+  onAutonomousActionEnded: (callback: (data: { petId: string; action: string }) => void) => {
+    ipcRenderer.on("pet:autonomous-action-ended", (_, data) => callback(data));
+  },
+  isAutonomousActionActive: (petId: string) => ipcRenderer.invoke("pet:is-autonomous-action-active", petId) as Promise<boolean>,
+
+  // Cursor position (for cursor attraction controller)
+  getCursorPosition: () => ipcRenderer.invoke("get-cursor-position") as Promise<{ x: number; y: number }>,
 
   // System
   getSystemMetrics: () => ipcRenderer.invoke("system:get-metrics"),

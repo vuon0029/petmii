@@ -1,7 +1,7 @@
 // src/main/ipcHandlers.ts
 // Registers IPC handlers bridging renderer to storage and window management.
 
-import { app, ipcMain } from "electron";
+import { app, ipcMain, BrowserWindow, screen } from "electron";
 import {
   loadGameState,
   saveGameState,
@@ -24,6 +24,8 @@ import {
   restoreMainWindow,
   isOverlayVisible,
 } from "./windowManager";
+import { registerCareIncrementHandler } from "./careIncrementHandler";
+import { registerEvolutionHandlers } from "./evolutionHandler";
 
 export function registerIpcHandlers(): void {
   // ===== Game State =====
@@ -50,18 +52,43 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("pet:save", (_, state: PetState) => {
     const result = savePetState(state);
     console.log("[petmii] IPC pet:save →", result ? "success" : "FAILED", state?.name);
+    if (result) {
+      // Broadcast updated game state to all windows (including overlay)
+      const game = loadGameState();
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send("game:state-update", game);
+        }
+      }
+    }
     return result;
   });
 
   ipcMain.handle("pet:add", (_, state: PetState) => {
     const result = addPet(state);
     console.log("[petmii] IPC pet:add →", result ? "success" : "FAILED (max reached?)", state?.name);
+    if (result) {
+      const game = loadGameState();
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send("game:state-update", game);
+        }
+      }
+    }
     return result;
   });
 
   ipcMain.handle("pet:remove", (_, petId: string) => {
     const result = removePet(petId);
     console.log("[petmii] IPC pet:remove →", result ? "success" : "FAILED", petId);
+    if (result) {
+      const game = loadGameState();
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send("game:state-update", game);
+        }
+      }
+    }
     return result;
   });
 
@@ -141,6 +168,11 @@ export function registerIpcHandlers(): void {
 
   // ===== System =====
 
+  ipcMain.handle("get-cursor-position", () => {
+    const point = screen.getCursorScreenPoint();
+    return { x: point.x, y: point.y };
+  });
+
   ipcMain.handle("system:get-metrics", () => {
     const metrics = app.getAppMetrics();
     const mainMemory = process.memoryUsage();
@@ -166,11 +198,67 @@ export function registerIpcHandlers(): void {
     };
   });
 
+  // ===== REST Action =====
+
+  // Track which pets are currently resting in the overlay (survives window remount)
+  const restingPetIds = new Set<string>();
+
+  ipcMain.on("pet:rest-start", (_, data: { petId: string }) => {
+    restingPetIds.add(data.petId);
+    const overlay = getOverlayWindow();
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send("overlay:rest-command", data);
+    }
+  });
+
+  ipcMain.on("pet:rest-ended", (_, data: { petId: string; completed: boolean }) => {
+    restingPetIds.delete(data.petId);
+    const mainWin = getMainWindow();
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send("pet:rest-ended", data);
+    }
+  });
+
+  ipcMain.handle("pet:is-resting", (_, petId: string) => {
+    return restingPetIds.has(petId);
+  });
+
+  // ===== Egg Notification Clearing =====
+  ipcMain.on("egg:clear-notifications", () => {
+    const overlay = getOverlayWindow();
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send("egg:clear-notifications");
+    }
+  });
+
+  // ===== Autonomous Actions =====
+  const autonomousActionPetIds = new Set<string>();
+
+  ipcMain.on("pet:autonomous-action-started", (_, data: { petId: string; action: string }) => {
+    autonomousActionPetIds.add(data.petId);
+    const mainWin = getMainWindow();
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send("pet:autonomous-action-started", data);
+    }
+  });
+
+  ipcMain.on("pet:autonomous-action-ended", (_, data: { petId: string; action: string }) => {
+    autonomousActionPetIds.delete(data.petId);
+    const mainWin = getMainWindow();
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send("pet:autonomous-action-ended", data);
+    }
+  });
+
+  ipcMain.handle("pet:is-autonomous-action-active", (_, petId: string) => {
+    return autonomousActionPetIds.has(petId);
+  });
+
   // ===== Graveyard =====
 
   ipcMain.handle("graveyard:load", () => {
     const game = loadGameState();
-    return game.graveyard;
+    return game.graveyard.slice(-10);
   });
 
   ipcMain.handle("graveyard:remove", (_, id: string) => {
@@ -179,4 +267,8 @@ export function registerIpcHandlers(): void {
     saveGameState(game);
     return true;
   });
+
+  // ===== Care History & Evolution =====
+  registerCareIncrementHandler();
+  registerEvolutionHandlers();
 }
