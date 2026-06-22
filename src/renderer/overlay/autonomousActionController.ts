@@ -229,8 +229,19 @@ export function generatePlaySpacing(): number {
 
 // ─── Internal Constants ───
 
-/** Duration (ms) for autonomousRest — mirrors REST_ACTION_DURATION_MS from OverlayApp */
-const AUTONOMOUS_REST_DURATION_MS = 30000;
+/** Minimum duration (ms) for autonomousRest */
+export const AUTONOMOUS_REST_MIN_DURATION_MS = 30000;
+
+/** Maximum duration (ms) for autonomousRest */
+export const AUTONOMOUS_REST_MAX_DURATION_MS = 60000;
+
+/** Generates a random duration for autonomousRest between min and max */
+export function generateRestDuration(): number {
+  return Math.floor(
+    Math.random() * (AUTONOMOUS_REST_MAX_DURATION_MS - AUTONOMOUS_REST_MIN_DURATION_MS) +
+      AUTONOMOUS_REST_MIN_DURATION_MS
+  );
+}
 
 // ─── Lifecycle Functions ───
 
@@ -332,9 +343,10 @@ function tick(state: AutonomousActionState, deps: AutonomousActionDeps): void {
         deps.dispatchAutonomousRest(pet.id);
 
         // Create duration timer — when it fires, call endAutonomousRest
+        const duration = generateRestDuration();
         const timer = setTimeout(() => {
           deps.endAutonomousRest(pet.id);
-        }, AUTONOMOUS_REST_DURATION_MS);
+        }, duration);
 
         state.activeRest.set(pet.id, timer);
       }
