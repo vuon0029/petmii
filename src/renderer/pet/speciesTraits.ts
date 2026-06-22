@@ -2,6 +2,7 @@
 // Species-specific decay multipliers and life stage timing.
 
 import type { PetSpecies } from "./petVariant";
+import { TEST_MODE, TEST_BABY_TO_CHILD_HOURS, TEST_CHILD_TO_ADULT_HOURS } from "../../shared/testMode";
 
 export interface SpeciesDecayMultipliers {
   hunger: number;
@@ -31,7 +32,9 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
       cleanliness: 1.0,
       bond: 1.0,
     },
-    stages: { babyToChild: 24, childToAdult: 72 }, // TESTING
+    stages: TEST_MODE
+      ? { babyToChild: TEST_BABY_TO_CHILD_HOURS, childToAdult: TEST_CHILD_TO_ADULT_HOURS }
+      : { babyToChild: 24, childToAdult: 72 },
     description: "Always hungry, but chill energy",
   },
   frog: {
@@ -42,7 +45,9 @@ export const SPECIES_TRAITS: Record<PetSpecies, SpeciesTraits> = {
       cleanliness: 1.2,
       bond: 1.0,
     },
-    stages: { babyToChild: 48, childToAdult: 120 }, // TESTING
+    stages: TEST_MODE
+      ? { babyToChild: TEST_BABY_TO_CHILD_HOURS, childToAdult: TEST_CHILD_TO_ADULT_HOURS }
+      : { babyToChild: 48, childToAdult: 120 },
     description: "Balanced, gets dirty easily",
   },
 };

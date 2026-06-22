@@ -5,6 +5,9 @@ import { resolve } from "path";
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
+    define: {
+      "process.env.PETMII_TEST_MODE": JSON.stringify(process.env.PETMII_TEST_MODE || ""),
+    },
     build: {
       rollupOptions: {
         input: {
@@ -25,6 +28,7 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react()],
+    envPrefix: ["PETMII_"],
     build: {
       rollupOptions: {
         input: {

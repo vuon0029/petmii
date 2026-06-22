@@ -15,6 +15,7 @@ import type {
 import { SPECIES_TRAITS } from "../renderer/pet/speciesTraits";
 import { PERSONALITY_TRAITS } from "../renderer/pet/personalityTraits";
 import { hideOverlay, restoreMainWindow } from "./windowManager";
+import { TEST_MODE, TEST_EGG_HOURLY_CHANCE, TEST_SHINY_CHANCE } from "../shared/testMode";
 
 // Decay tick interval (ms)
 const DECAY_TICK_MS = 60_000; // every 60 seconds
@@ -42,11 +43,11 @@ const STAGE_MULTIPLIERS: Record<PetLifeStage, number> = {
 };
 
 // Egg discovery config
-const EGG_DAILY_CHANCE = 1; // TESTING — not used directly when override below is active
-const EGG_HOURLY_CHANCE = EGG_DAILY_CHANCE / 24; // TESTING: ~95% chance to find egg within 5 minutes (5 ticks)
+const EGG_DAILY_CHANCE = 0.3; // ~30% per day per eligible pet
+const EGG_HOURLY_CHANCE = TEST_MODE ? TEST_EGG_HOURLY_CHANCE : EGG_DAILY_CHANCE / 24;
 const HEALTHY_STAT_THRESHOLD = 60;
 const MAX_EGGS = 3;
-const SHINY_EGG_CHANCE = 1 / 200;
+const SHINY_EGG_CHANCE = TEST_MODE ? TEST_SHINY_CHANCE : 1 / 200;
 const SAME_SPECIES_WEIGHT = 2; // 2x more likely to find same species egg
 
 const ALL_SPECIES: PetSpecies[] = ["blob", "frog"];

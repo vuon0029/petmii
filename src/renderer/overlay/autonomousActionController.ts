@@ -9,14 +9,15 @@
  */
 
 import type { PetOverlayState } from "../OverlayApp";
+import { TEST_MODE, TEST_AUTONOMOUS_REST_BASE_CHANCE, TEST_AUTONOMOUS_REST_COOLDOWN_MS, TEST_PLAY_TOGETHER_BASE_CHANCE, TEST_PLAY_TOGETHER_COOLDOWN_MS } from "../../shared/testMode";
 
 // ─── Tunable Constants (exported) ───
 
 /** Tick interval for the autonomous action evaluation loop (ms) 5000 */
 export const AUTONOMOUS_TICK_INTERVAL_MS = 5000;
 
-/** Base probability (0–1) that an eligible pet begins autonomousRest per tick 0.04 */
-export const AUTONOMOUS_REST_BASE_CHANCE = 0.04;
+/** Base probability (0–1) that an eligible pet begins autonomousRest per tick */
+export const AUTONOMOUS_REST_BASE_CHANCE = TEST_MODE ? TEST_AUTONOMOUS_REST_BASE_CHANCE : 0.04;
 
 /** Multiplier applied to rest base chance during the nighttime window */
 export const AUTONOMOUS_REST_NIGHT_MULTIPLIER = 3.0;
@@ -27,11 +28,11 @@ export const NIGHTTIME_START_HOUR = 22;
 /** Hour (0–23) at which the nighttime window ends (exclusive) */
 export const NIGHTTIME_END_HOUR = 6;
 
-/** Cooldown duration (ms) after autonomousRest ends before it can trigger again 300000 */
-export const AUTONOMOUS_REST_COOLDOWN_MS = 300000;
+/** Cooldown duration (ms) after autonomousRest ends before it can trigger again */
+export const AUTONOMOUS_REST_COOLDOWN_MS = TEST_MODE ? TEST_AUTONOMOUS_REST_COOLDOWN_MS : 300000;
 
-/** Base probability (0–1) that playTogether triggers per eligible tick 0.1 */
-export const PLAY_TOGETHER_BASE_CHANCE = 0.1;
+/** Base probability (0–1) that playTogether triggers per eligible tick */
+export const PLAY_TOGETHER_BASE_CHANCE = TEST_MODE ? TEST_PLAY_TOGETHER_BASE_CHANCE : 0.1;
 
 /** Minimum number of pets required for playTogether eligibility */
 export const PLAY_TOGETHER_MIN_PETS = 2;
@@ -42,8 +43,8 @@ export const PLAY_TOGETHER_MIN_DURATION_MS = 30000;
 /** Maximum duration (ms) for a playTogether session */
 export const PLAY_TOGETHER_MAX_DURATION_MS = 60000;
 
-/** Cooldown duration (ms) after playTogether ends before it can trigger again 120000 */
-export const PLAY_TOGETHER_COOLDOWN_MS = 120000;
+/** Cooldown duration (ms) after playTogether ends before it can trigger again */
+export const PLAY_TOGETHER_COOLDOWN_MS = TEST_MODE ? TEST_PLAY_TOGETHER_COOLDOWN_MS : 120000;
 
 /** Maximum X distance between two pets for playTogether eligibility (px) */
 export const PLAY_TOGETHER_TRIGGER_RADIUS_PX = 150;
