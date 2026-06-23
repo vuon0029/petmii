@@ -131,11 +131,12 @@ declare global {
       onEvolveRejected(callback: (data: { petId: string; sessionId: string }) => void): void;
 
       // Autonomous Actions
-      sendAutonomousActionStarted(data: { petId: string; action: string }): void;
+      sendAutonomousActionStarted(data: { petId: string; action: string; durationMs?: number }): void;
       sendAutonomousActionEnded(data: { petId: string; action: string }): void;
-      onAutonomousActionStarted(callback: (data: { petId: string; action: string }) => void): void;
+      onAutonomousActionStarted(callback: (data: { petId: string; action: string; durationMs?: number }) => void): void;
       onAutonomousActionEnded(callback: (data: { petId: string; action: string }) => void): void;
       isAutonomousActionActive(petId: string): Promise<boolean>;
+      getAutonomousActionInfo(petId: string): Promise<{ action: string; remainingMs: number } | null>;
 
       // System
       getSystemMetrics(): Promise<SystemMetrics>;

@@ -18,6 +18,9 @@ interface PetDetailsProps {
   restDisabled?: boolean;
   actionsDisabled?: boolean;
   evolving?: boolean;
+  isResting?: boolean;
+  autonomousCountdown?: number | null;
+  autonomousActionName?: string | null;
 }
 
 function formatAge(hatchedAt: string): string {
@@ -62,6 +65,9 @@ export function PetDetails({
   restDisabled,
   actionsDisabled,
   evolving,
+  isResting,
+  autonomousCountdown,
+  autonomousActionName,
 }: PetDetailsProps) {
   const canRename = petState.lifeStage === "adult";
   const nextStage = getNextStageInfo(petState);
@@ -132,7 +138,7 @@ export function PetDetails({
           variantId={resolveVariantId(petState)}
           personality={petState.personality}
           lifeStage={petState.lifeStage}
-          visualState="idle"
+          visualState={isResting ? "sleep" : "idle"}
         />
         <div className="pet-details-speech-wrapper">
           {petState.lastMessage && petState.lastMessage !== "~" && (
@@ -197,13 +203,17 @@ export function PetDetails({
           Feed
         </button>
         <button type="button" onClick={onPlay} disabled={actionsDisabled}>
-          Play
+          {autonomousActionName === "playTogether" && autonomousCountdown != null
+            ? `${Math.floor(autonomousCountdown / 60)}:${String(autonomousCountdown % 60).padStart(2, "0")}`
+            : "Play"}
         </button>
         <button type="button" onClick={onClean} disabled={actionsDisabled}>
           Clean
         </button>
         <button type="button" onClick={onRest} disabled={restDisabled || actionsDisabled}>
-          Rest
+          {autonomousActionName === "autonomousRest" && autonomousCountdown != null
+            ? `${Math.floor(autonomousCountdown / 60)}:${String(autonomousCountdown % 60).padStart(2, "0")}`
+            : "Rest"}
         </button>
       </div>
     </div>

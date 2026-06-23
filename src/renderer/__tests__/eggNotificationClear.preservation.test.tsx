@@ -111,6 +111,7 @@ function setupMockAPI(gameState: GameState) {
     sendAutonomousActionStarted: vi.fn(),
     sendAutonomousActionEnded: vi.fn(),
     isAutonomousActionActive: vi.fn().mockResolvedValue(false),
+    getAutonomousActionInfo: vi.fn().mockResolvedValue(null),
     getSystemMetrics: vi.fn().mockResolvedValue({ processes: [], mainProcess: { rss: 0, heapUsed: 0, heapTotal: 0, external: 0 } }),
     getCursorPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
     // clearEggNotifications exists on the mock so we can verify it's NOT called

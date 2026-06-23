@@ -138,6 +138,7 @@ function setupMockAPI(gameState: GameState) {
     sendAutonomousActionStarted: vi.fn(),
     sendAutonomousActionEnded: vi.fn(),
     isAutonomousActionActive: vi.fn().mockResolvedValue(false),
+    getAutonomousActionInfo: vi.fn().mockResolvedValue(null),
 
     // System
     getSystemMetrics: vi.fn().mockResolvedValue({ processes: [], mainProcess: { rss: 0, heapUsed: 0, heapTotal: 0, external: 0 } }),

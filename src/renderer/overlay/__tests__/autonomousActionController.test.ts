@@ -359,7 +359,7 @@ describe("AutonomousActionController", () => {
 
       vi.advanceTimersByTime(AUTONOMOUS_TICK_INTERVAL_MS);
 
-      expect(dispatchAutonomousRest).toHaveBeenCalledWith("pet1");
+      expect(dispatchAutonomousRest).toHaveBeenCalledWith("pet1", expect.any(Number));
 
       destroyAutonomousActionController(state);
     });

@@ -8,6 +8,7 @@ import { animateMovementAction } from "./overlay/movementController";
 import { resolveProfile, computeResolvedRestY } from "./overlay/profileResolver";
 import { resolveVariantId } from "./overlay/variantId";
 import { createCursorAttractionController, destroyCursorAttractionController, notifyApproachEnded, resolveApproachAmbientAction, computeSlotOffsetY, CursorAttractionState, CursorAttractionDeps, MOUSE_ATTRACT_SPEED_MULTIPLIER, MOUSE_ATTRACT_PAUSE_MULTIPLIER } from "./overlay/cursorAttractionController";
+import { getEligibleBlockers, checkOverlap, computeApproachStopX, BoundingBox, resolveCollision, detectHeadBump, validatePlayPositions, correctSpawnOverlap, COLLISION_BUFFER_PX } from "./overlay/collisionDetector";
 import { createAutonomousActionController, destroyAutonomousActionController, notifyAutonomousRestEnded, notifyPlayTogetherEnded, computeFacingDirections, generatePlaySpacing, selectPlayIcon, AutonomousActionState } from "./overlay/autonomousActionController";
 import { getCursorPos } from "./overlay/getCursorPos";
 import { shouldCountPickup } from "./overlay/pickedUpTracker";
@@ -195,7 +196,34 @@ export function OverlayApp() {
             }
           } else {
             // New pet — random position
-            merged.push(createPetState(pet, containerWidth, petScaleRef.current));
+            const newPetState = createPetState(pet, containerWidth, petScaleRef.current);
+            const renderSize = PET_BASE_SIZE * petScaleRef.current;
+
+            // Check overlap against all existing idle pets in merged
+            for (let i = 0; i < merged.length; i++) {
+              const existing = merged[i];
+              if (existing.physicsState !== "idle") continue;
+
+              // Edge-to-edge distance check
+              const leftX = Math.min(newPetState.x, existing.x);
+              const rightX = Math.max(newPetState.x, existing.x);
+              const edgeToEdge = rightX - leftX - renderSize;
+
+              if (edgeToEdge < COLLISION_BUFFER_PX) {
+                // Overlap detected — correct spawn positions
+                const corrected = correctSpawnOverlap(
+                  newPetState.x,
+                  existing.x,
+                  renderSize,
+                  0,
+                  containerWidth,
+                );
+                newPetState.x = corrected.pet1X;
+                merged[i] = { ...existing, x: corrected.pet2X };
+              }
+            }
+
+            merged.push(newPetState);
           }
         }
         return merged;
@@ -215,9 +243,38 @@ export function OverlayApp() {
       // Apply persisted pet scale
       const savedScale = game.settings.petScale ?? DEFAULT_PET_SCALE;
       setPetScale(savedScale);
-      setPets(
-        visiblePets.map((p: PetState) => createPetState(p, window.innerWidth, savedScale)),
-      );
+
+      // Create all pet states and correct any spawn overlaps
+      const initialPets: PetOverlayState[] = [];
+      const renderSize = PET_BASE_SIZE * savedScale;
+      for (const p of visiblePets) {
+        const newPet = createPetState(p, window.innerWidth, savedScale);
+
+        // Check overlap against all previously placed pets
+        for (let i = 0; i < initialPets.length; i++) {
+          const existing = initialPets[i];
+          if (existing.physicsState !== "idle") continue;
+
+          const leftX = Math.min(newPet.x, existing.x);
+          const rightX = Math.max(newPet.x, existing.x);
+          const edgeToEdge = rightX - leftX - renderSize;
+
+          if (edgeToEdge < COLLISION_BUFFER_PX) {
+            const corrected = correctSpawnOverlap(
+              newPet.x,
+              existing.x,
+              renderSize,
+              0,
+              window.innerWidth,
+            );
+            newPet.x = corrected.pet1X;
+            initialPets[i] = { ...existing, x: corrected.pet2X };
+          }
+        }
+
+        initialPets.push(newPet);
+      }
+      setPets(initialPets);
     }
     init();
 
@@ -480,7 +537,49 @@ export function OverlayApp() {
         // Determine step direction and distance
         const dir: 1 | -1 = dx > 0 ? 1 : -1;
         const stepDist = Math.min(profile.stepDistance, Math.abs(dx));
-        const stepTargetX = pet.x + stepDist * dir;
+        let stepTargetX = pet.x + stepDist * dir;
+
+        // ─── Collision check before approach step ───
+        // Validate step target against eligible blockers (only "idle" pets)
+        const petSize = getPetRenderSize();
+        const blockers = getEligibleBlockers(
+          petsRef.current,
+          petId,
+          "ground",
+          petSize,
+        );
+
+        if (blockers.length > 0) {
+          const proposedBox: BoundingBox = {
+            x: stepTargetX,
+            y: approachY,
+            width: petSize,
+            height: petSize,
+          };
+          const overlapResult = checkOverlap(proposedBox, blockers);
+
+          if (overlapResult.collides && overlapResult.blockingBox) {
+            // Stop at the buffer boundary using computeApproachStopX
+            const stopX = computeApproachStopX(dir, overlapResult.blockingBox, petSize);
+
+            // Only use stopX if it represents meaningful progress toward the target
+            // (i.e., stop position is between current position and the blocker)
+            const wouldMoveForward = dir === 1
+              ? (stopX > pet.x + ARRIVAL_THRESHOLD_PX)
+              : (stopX < pet.x - ARRIVAL_THRESHOLD_PX);
+
+            if (wouldMoveForward) {
+              stepTargetX = stopX;
+            } else {
+              // Cannot advance further — retry on next movement cycle
+              // in case the blocker has moved away
+              setTimeout(() => {
+                executeStep();
+              }, Math.max(profile.duration / MOUSE_ATTRACT_SPEED_MULTIPLIER, 50) + profile.landingPauseMs);
+              return;
+            }
+          }
+        }
 
         // Update direction for this step
         setPets(prev => prev.map(p =>
@@ -611,7 +710,7 @@ export function OverlayApp() {
   }, []);
 
   // Autonomous action controller — dispatch/end functions
-  function dispatchAutonomousRestFn(petId: string) {
+  function dispatchAutonomousRestFn(petId: string, durationMs: number) {
     const pet = petsRef.current.find(p => p.id === petId);
     if (!pet) return;
     if (pet.physicsState !== "idle" || pet.currentAction !== "idle") return;
@@ -624,16 +723,20 @@ export function OverlayApp() {
         : p
     ));
 
-    window.petmiiAPI.sendAutonomousActionStarted({ petId, action: "autonomousRest" });
+    window.petmiiAPI.sendAutonomousActionStarted({ petId, action: "autonomousRest", durationMs });
   }
 
-  function endAutonomousRestFn(petId: string) {
+  async function endAutonomousRestFn(petId: string) {
     const pet = petsRef.current.find(p => p.id === petId);
     if (!pet || pet.currentAction !== "autonomousRest") return;
 
+    // Apply 50% rest benefit
+    const updatedPetData = applyAutonomousRestAction(pet.pet);
+    await window.petmiiAPI.savePet(updatedPetData);
+
     setPets(prev => prev.map(p =>
       p.id === petId
-        ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState }
+        ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState, pet: updatedPetData }
         : p
     ));
 
@@ -655,8 +758,18 @@ export function OverlayApp() {
     const spacing = generatePlaySpacing(); // 20-50px random gap
     const midX = (pet1.x + pet2.x) / 2;
     const maxX = getMaxX();
-    const pet1X = clamp(midX - spacing / 2, 0, maxX);
-    const pet2X = clamp(midX + spacing / 2, 0, maxX);
+    const petWidth = getPetRenderSize();
+    let pet1X = clamp(midX - spacing / 2, 0, maxX);
+    let pet2X = clamp(midX + spacing / 2, 0, maxX);
+
+    // Validate play positions for spacing and viewport bounds
+    const validated = validatePlayPositions(pet1X, pet2X, petWidth, containerWidth, 50, 80);
+    if (validated.cancelled) {
+      // Viewport too narrow — abort play-together, leave both pets in their prior state
+      return;
+    }
+    pet1X = validated.pet1X;
+    pet2X = validated.pet2X;
 
     // Compute ground Y for both
     const groundY = getGroundY();
@@ -675,14 +788,27 @@ export function OverlayApp() {
     setPlayTogetherIcon(selectPlayIcon());
     startPlayBursts(petId1, petId2);
 
-    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId1, action: "playTogether" });
-    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId2, action: "playTogether" });
+    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId1, action: "playTogether", durationMs });
+    window.petmiiAPI.sendAutonomousActionStarted({ petId: petId2, action: "playTogether", durationMs });
   }
 
-  function endPlayTogetherFn(petId1: string, petId2: string) {
+  async function endPlayTogetherFn(petId1: string, petId2: string) {
+    const pet1 = petsRef.current.find(p => p.id === petId1);
+    const pet2 = petsRef.current.find(p => p.id === petId2);
+
+    // Apply 50% play benefits to both pets
+    const updatedPet1Data = pet1 && pet1.currentAction === "playTogether" ? applyAutonomousPlayAction(pet1.pet) : null;
+    const updatedPet2Data = pet2 && pet2.currentAction === "playTogether" ? applyAutonomousPlayAction(pet2.pet) : null;
+
+    if (updatedPet1Data) await window.petmiiAPI.savePet(updatedPet1Data);
+    if (updatedPet2Data) await window.petmiiAPI.savePet(updatedPet2Data);
+
     setPets(prev => prev.map(p => {
-      if ((p.id === petId1 || p.id === petId2) && p.currentAction === "playTogether") {
-        return { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState };
+      if (p.id === petId1 && p.currentAction === "playTogether") {
+        return { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState, ...(updatedPet1Data ? { pet: updatedPet1Data } : {}) };
+      }
+      if (p.id === petId2 && p.currentAction === "playTogether") {
+        return { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState, ...(updatedPet2Data ? { pet: updatedPet2Data } : {}) };
       }
       return p;
     }));
@@ -802,7 +928,7 @@ export function OverlayApp() {
       getPets: () => petsRef.current,
       getViewportWidth: () => window.innerWidth,
       getGroundY: () => getGroundY(),
-      dispatchAutonomousRest: (petId) => dispatchAutonomousRestFn(petId),
+      dispatchAutonomousRest: (petId, durationMs) => dispatchAutonomousRestFn(petId, durationMs),
       endAutonomousRest: (petId) => endAutonomousRestFn(petId),
       dispatchPlayTogether: (petId1, petId2, durationMs) => dispatchPlayTogetherFn(petId1, petId2, durationMs),
       endPlayTogether: (petId1, petId2) => endPlayTogetherFn(petId1, petId2),
@@ -984,6 +1110,29 @@ export function OverlayApp() {
       }
     }
 
+    // ─── Collision detection: check proposed target against eligible blockers ───
+    const petRenderSize = getPetRenderSize();
+    const blockers = getEligibleBlockers(
+      petsRef.current.map(p => ({ id: p.id, physicsState: p.physicsState, x: p.x, y: p.y })),
+      petId,
+      "ground",
+      petRenderSize,
+    );
+    const proposedBox = { x: targetX, y: targetY, width: petRenderSize, height: petRenderSize };
+    const check = checkOverlap(proposedBox, blockers);
+
+    if (check.collides) {
+      const resolution = resolveCollision(currentX, targetX, profile.stepDistance, petRenderSize, blockers, 0, getMaxX());
+      if (!resolution.resolved) {
+        // No valid alternative — skip movement and set pet to idle for this cycle
+        setPets(prev => prev.map(p => p.id === petId ? { ...p, currentAction: "idle" as ActionName } : p));
+        return;
+      }
+      targetX = resolution.targetX;
+      // Update direction to match the resolved target so the pet sprite faces correctly
+      dir = targetX >= currentX ? 1 : -1;
+    }
+
     // Set currentAction and direction before starting animation
     setPets(prev => prev.map(p =>
       p.id === petId ? { ...p, currentAction: action, direction: dir } : p
@@ -1080,6 +1229,20 @@ export function OverlayApp() {
             if (incrementHardThrow) {
               window.petmiiAPI.careIncrement({ petId: p.id, action: "hardThrow" });
             }
+          }
+
+          // Head-bump detection: check if flying pet hits the top of an idle/gettingUp pet
+          const flyingBox = { x, y, width: getPetRenderSize(), height: getPetRenderSize() };
+          const headBumpBlockers = getEligibleBlockers(
+            prev.map(pp => ({ id: pp.id, physicsState: pp.physicsState, x: pp.x, y: pp.y })),
+            p.id,
+            "headBump",
+            getPetRenderSize(),
+          );
+          const bump = detectHeadBump(flyingBox, vx, vy, headBumpBlockers);
+          if (bump.collided) {
+            vx = bump.newVx;
+            vy = bump.newVy;
           }
 
           // Ground (y >= 0 means at bottom of container - pet height - padding)
@@ -1497,6 +1660,40 @@ function applyRestAction(pet: PetState): PetState {
     hunger: clamp(pet.hunger - 5, 0, 100),
     bond: clamp(pet.bond + BOND, 0, 100),
     lastRestedAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Autonomous rest gives 50% of user-initiated rest benefits */
+function applyAutonomousRestAction(pet: PetState): PetState {
+  const now = new Date().toISOString();
+  const AMOUNT = 12; // 50% of 25
+  const HUNGER_REDUCTION = 2; // 50% of 5, rounded down
+  const BOND = 1; // 50% of 2
+  return {
+    ...pet,
+    energy: clamp(pet.energy + AMOUNT, 0, 100),
+    hunger: clamp(pet.hunger - HUNGER_REDUCTION, 0, 100),
+    bond: clamp(pet.bond + BOND, 0, 100),
+    lastRestedAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Autonomous playTogether gives 50% of user-initiated play benefits to each pet */
+function applyAutonomousPlayAction(pet: PetState): PetState {
+  const now = new Date().toISOString();
+  const HAPPINESS = 10; // 50% of 20
+  const ENERGY_COST = 5; // 50% of 10
+  const HUNGER_COST = 2; // 50% of 5, rounded down
+  const BOND = 1; // 50% of 2
+  return {
+    ...pet,
+    happiness: clamp(pet.happiness + HAPPINESS, 0, 100),
+    energy: clamp(pet.energy - ENERGY_COST, 0, 100),
+    hunger: clamp(pet.hunger - HUNGER_COST, 0, 100),
+    bond: clamp(pet.bond + BOND, 0, 100),
+    lastPlayedAt: now,
     updatedAt: now,
   };
 }

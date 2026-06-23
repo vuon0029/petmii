@@ -30,6 +30,7 @@ const MIN_INTERVAL_MS = 1000;
 
 export interface ActionSchedulerState {
   timerId: ReturnType<typeof setInterval> | null;
+  initialDelayId: ReturnType<typeof setTimeout> | null;
   petId: string;
 }
 
@@ -53,15 +54,28 @@ export function createActionScheduler(
 ): ActionSchedulerState {
   const state: ActionSchedulerState = {
     timerId: null,
+    initialDelayId: null,
     petId,
   };
 
   const profile = getProfile();
-  const interval = Math.max(profile.interval, MIN_INTERVAL_MS);
+  const baseInterval = Math.max(profile.interval, MIN_INTERVAL_MS);
+  // Jitter interval ±30% to desync multiple pets with the same profile
+  const jitter = 0.7 + Math.random() * 0.6; // 0.7–1.3
+  const interval = Math.round(baseInterval * jitter);
 
-  state.timerId = setInterval(() => {
+  // Random initial delay (0 to full interval) so pets don't start in phase
+  const initialDelay = Math.round(Math.random() * interval);
+
+  state.initialDelayId = setTimeout(() => {
+    state.initialDelayId = null;
+    // Fire first tick after the random delay
     tick(petId, getProfile, getPhysicsState, getCurrentAction, dispatchAction);
-  }, interval);
+    // Then start the repeating interval
+    state.timerId = setInterval(() => {
+      tick(petId, getProfile, getPhysicsState, getCurrentAction, dispatchAction);
+    }, interval);
+  }, initialDelay);
 
   return state;
 }
@@ -70,6 +84,10 @@ export function createActionScheduler(
  * Destroys an action scheduler, clearing its interval timer.
  */
 export function destroyActionScheduler(state: ActionSchedulerState): void {
+  if (state.initialDelayId !== null) {
+    clearTimeout(state.initialDelayId);
+    state.initialDelayId = null;
+  }
   if (state.timerId !== null) {
     clearInterval(state.timerId);
     state.timerId = null;

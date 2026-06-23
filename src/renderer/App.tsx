@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { generateRandomPet } from "./pet/generateRandomPet";
 import {
   DEFAULT_PET_STATS,
@@ -30,6 +30,11 @@ export function App() {
   const [overlayOn, setOverlayOn] = useState(false);
   const [isRestingInOverlay, setIsRestingInOverlay] = useState(false);
   const [isAutonomousActionActive, setIsAutonomousActionActive] = useState(false);
+  const [autonomousActionName, setAutonomousActionName] = useState<string | null>(null);
+  const [autonomousCountdown, setAutonomousCountdown] = useState<number | null>(null);
+  const autonomousEndTimeRef = useRef<number | null>(null);
+  // Per-pet autonomous action tracking (petId → { action, endTime })
+  const autonomousActionsRef = useRef<Map<string, { action: string; endTime: number }>>(new Map());
   const [evolvingPetId, setEvolvingPetId] = useState<string | null>(null);
   const [evolutionReveal, setEvolutionReveal] = useState<{ petName: string; newStage: string; adultTrait: string | null } | null>(null);
 
@@ -84,10 +89,28 @@ export function App() {
     });
 
     window.petmiiAPI.onAutonomousActionStarted((data) => {
+      // Track per-pet regardless of selection
+      if (data.durationMs) {
+        autonomousActionsRef.current.set(data.petId, {
+          action: data.action,
+          endTime: Date.now() + data.durationMs,
+        });
+      } else {
+        autonomousActionsRef.current.set(data.petId, {
+          action: data.action,
+          endTime: Date.now() + 45000, // fallback estimate
+        });
+      }
+
       setGame((currentGame) => {
         setSelectedPetIndex((idx) => {
           if (currentGame?.pets[idx]?.id === data.petId) {
             setIsAutonomousActionActive(true);
+            setAutonomousActionName(data.action);
+            if (data.durationMs) {
+              autonomousEndTimeRef.current = Date.now() + data.durationMs;
+              setAutonomousCountdown(Math.ceil(data.durationMs / 1000));
+            }
           }
           return idx;
         });
@@ -95,10 +118,16 @@ export function App() {
       });
     });
     window.petmiiAPI.onAutonomousActionEnded((data) => {
+      // Clear per-pet tracking
+      autonomousActionsRef.current.delete(data.petId);
+
       setGame((currentGame) => {
         setSelectedPetIndex((idx) => {
           if (currentGame?.pets[idx]?.id === data.petId) {
             setIsAutonomousActionActive(false);
+            setAutonomousActionName(null);
+            autonomousEndTimeRef.current = null;
+            setAutonomousCountdown(null);
           }
           return idx;
         });
@@ -131,11 +160,59 @@ export function App() {
     if (!selectedPet || !overlayOn) {
       setIsRestingInOverlay(false);
       setIsAutonomousActionActive(false);
+      setAutonomousActionName(null);
+      autonomousEndTimeRef.current = null;
+      setAutonomousCountdown(null);
       return;
     }
     window.petmiiAPI.isRestingInOverlay(selectedPet.id).then(setIsRestingInOverlay);
-    window.petmiiAPI.isAutonomousActionActive(selectedPet.id).then(setIsAutonomousActionActive);
+
+    // Check per-pet tracking first (has action name + end time)
+    const tracked = autonomousActionsRef.current.get(selectedPet.id);
+    if (tracked) {
+      setIsAutonomousActionActive(true);
+      setAutonomousActionName(tracked.action);
+      autonomousEndTimeRef.current = tracked.endTime;
+      const remaining = Math.max(0, Math.ceil((tracked.endTime - Date.now()) / 1000));
+      setAutonomousCountdown(remaining);
+    } else {
+      // Query main process for action info (works even if App opened after action started)
+      window.petmiiAPI.getAutonomousActionInfo(selectedPet.id).then((info) => {
+        if (info && info.remainingMs > 0) {
+          setIsAutonomousActionActive(true);
+          setAutonomousActionName(info.action);
+          autonomousEndTimeRef.current = Date.now() + info.remainingMs;
+          setAutonomousCountdown(Math.ceil(info.remainingMs / 1000));
+        } else {
+          setIsAutonomousActionActive(false);
+          setAutonomousActionName(null);
+          autonomousEndTimeRef.current = null;
+          setAutonomousCountdown(null);
+        }
+      });
+    }
   }, [selectedPetIndex, selectedPet?.id, overlayOn]);
+
+  // Countdown timer for autonomous actions
+  useEffect(() => {
+    if (!autonomousEndTimeRef.current) return;
+
+    const interval = setInterval(() => {
+      const endTime = autonomousEndTimeRef.current;
+      if (!endTime) {
+        setAutonomousCountdown(null);
+        clearInterval(interval);
+        return;
+      }
+      const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      setAutonomousCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [autonomousEndTimeRef.current]);
 
   // ===== Actions =====
 
@@ -422,6 +499,9 @@ export function App() {
                 restDisabled={isRestingInOverlay || isAutonomousActionActive}
                 actionsDisabled={isRestingInOverlay || isAutonomousActionActive}
                 evolving={evolvingPetId === selectedPet.id}
+                isResting={isRestingInOverlay || (isAutonomousActionActive && autonomousActionName === "autonomousRest")}
+                autonomousCountdown={autonomousCountdown}
+                autonomousActionName={autonomousActionName}
               />
               {showRenameModal && (
                 <RenamePetModal

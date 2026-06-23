@@ -232,10 +232,11 @@ export function registerIpcHandlers(): void {
   });
 
   // ===== Autonomous Actions =====
-  const autonomousActionPetIds = new Set<string>();
+  const autonomousActionPetIds = new Map<string, { action: string; endTime: number }>();
 
-  ipcMain.on("pet:autonomous-action-started", (_, data: { petId: string; action: string }) => {
-    autonomousActionPetIds.add(data.petId);
+  ipcMain.on("pet:autonomous-action-started", (_, data: { petId: string; action: string; durationMs?: number }) => {
+    const endTime = data.durationMs ? Date.now() + data.durationMs : Date.now() + 45000;
+    autonomousActionPetIds.set(data.petId, { action: data.action, endTime });
     const mainWin = getMainWindow();
     if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send("pet:autonomous-action-started", data);
@@ -252,6 +253,13 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle("pet:is-autonomous-action-active", (_, petId: string) => {
     return autonomousActionPetIds.has(petId);
+  });
+
+  ipcMain.handle("pet:get-autonomous-action-info", (_, petId: string) => {
+    const info = autonomousActionPetIds.get(petId);
+    if (!info) return null;
+    const remainingMs = Math.max(0, info.endTime - Date.now());
+    return { action: info.action, remainingMs };
   });
 
   // ===== Graveyard =====

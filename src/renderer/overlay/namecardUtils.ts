@@ -11,6 +11,20 @@ export interface NamecardMilestone {
   adornment?: string;
 }
 
+/** Asset tier folder names used to resolve namecard images. */
+export type NamecardAssetTier = "lv1" | "lv90" | "lv180" | "lv365";
+
+/**
+ * Returns the asset tier folder name based on the pet's day number.
+ * Lv1-89 → lv1, Lv90-179 → lv90, Lv180-364 → lv180, Lv365+ → lv365
+ */
+export function getNamecardAssetTier(dayNumber: number): NamecardAssetTier {
+  if (dayNumber >= NAMECARD_ANCIENT_DAY_THRESHOLD) return "lv365";
+  if (dayNumber >= NAMECARD_LEGENDARY_DAY_THRESHOLD) return "lv180";
+  if (dayNumber >= NAMECARD_SEASONED_DAY_THRESHOLD) return "lv90";
+  return "lv1";
+}
+
 export function computeDayNumber(hatchedAt: string, now?: number): number {
   const currentTime = now ?? Date.now();
   const hatchTime = Date.parse(hatchedAt);

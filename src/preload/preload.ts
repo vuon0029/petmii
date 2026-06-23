@@ -110,15 +110,16 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
   },
 
   // Autonomous Actions — overlay notifies main view when autonomous actions start/end
-  sendAutonomousActionStarted: (data: { petId: string; action: string }) => ipcRenderer.send("pet:autonomous-action-started", data),
+  sendAutonomousActionStarted: (data: { petId: string; action: string; durationMs?: number }) => ipcRenderer.send("pet:autonomous-action-started", data),
   sendAutonomousActionEnded: (data: { petId: string; action: string }) => ipcRenderer.send("pet:autonomous-action-ended", data),
-  onAutonomousActionStarted: (callback: (data: { petId: string; action: string }) => void) => {
+  onAutonomousActionStarted: (callback: (data: { petId: string; action: string; durationMs?: number }) => void) => {
     ipcRenderer.on("pet:autonomous-action-started", (_, data) => callback(data));
   },
   onAutonomousActionEnded: (callback: (data: { petId: string; action: string }) => void) => {
     ipcRenderer.on("pet:autonomous-action-ended", (_, data) => callback(data));
   },
   isAutonomousActionActive: (petId: string) => ipcRenderer.invoke("pet:is-autonomous-action-active", petId) as Promise<boolean>,
+  getAutonomousActionInfo: (petId: string) => ipcRenderer.invoke("pet:get-autonomous-action-info", petId) as Promise<{ action: string; remainingMs: number } | null>,
 
   // Cursor position (for cursor attraction controller)
   getCursorPosition: () => ipcRenderer.invoke("get-cursor-position") as Promise<{ x: number; y: number }>,

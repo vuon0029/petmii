@@ -17,22 +17,22 @@ import { TEST_MODE, TEST_AUTONOMOUS_REST_BASE_CHANCE, TEST_AUTONOMOUS_REST_COOLD
 export const AUTONOMOUS_TICK_INTERVAL_MS = 5000;
 
 /** Base probability (0–1) that an eligible pet begins autonomousRest per tick */
-export const AUTONOMOUS_REST_BASE_CHANCE = TEST_MODE ? TEST_AUTONOMOUS_REST_BASE_CHANCE : 0.04;
+export const AUTONOMOUS_REST_BASE_CHANCE = TEST_MODE ? TEST_AUTONOMOUS_REST_BASE_CHANCE : 0.01;
 
 /** Multiplier applied to rest base chance during the nighttime window */
-export const AUTONOMOUS_REST_NIGHT_MULTIPLIER = 3.0;
+export const AUTONOMOUS_REST_NIGHT_MULTIPLIER = 10.0;
 
 /** Hour (0–23) at which the nighttime window begins (inclusive) */
 export const NIGHTTIME_START_HOUR = 22;
 
 /** Hour (0–23) at which the nighttime window ends (exclusive) */
-export const NIGHTTIME_END_HOUR = 6;
+export const NIGHTTIME_END_HOUR = 3;
 
 /** Cooldown duration (ms) after autonomousRest ends before it can trigger again */
 export const AUTONOMOUS_REST_COOLDOWN_MS = TEST_MODE ? TEST_AUTONOMOUS_REST_COOLDOWN_MS : 300000;
 
 /** Base probability (0–1) that playTogether triggers per eligible tick */
-export const PLAY_TOGETHER_BASE_CHANCE = TEST_MODE ? TEST_PLAY_TOGETHER_BASE_CHANCE : 0.1;
+export const PLAY_TOGETHER_BASE_CHANCE = TEST_MODE ? TEST_PLAY_TOGETHER_BASE_CHANCE : 0.04;
 
 /** Minimum number of pets required for playTogether eligibility */
 export const PLAY_TOGETHER_MIN_PETS = 2;
@@ -95,10 +95,10 @@ export interface AutonomousActionDeps {
   getPets: () => PetOverlayState[];
   getViewportWidth: () => number;
   getGroundY: () => number;
-  dispatchAutonomousRest: (petId: string) => void;
-  endAutonomousRest: (petId: string) => void;
+  dispatchAutonomousRest: (petId: string, durationMs: number) => void;
+  endAutonomousRest: (petId: string) => void | Promise<void>;
   dispatchPlayTogether: (petId1: string, petId2: string, durationMs: number) => void;
-  endPlayTogether: (petId1: string, petId2: string) => void;
+  endPlayTogether: (petId1: string, petId2: string) => void | Promise<void>;
   getCurrentHour: () => number;
 }
 
@@ -340,10 +340,11 @@ function tick(state: AutonomousActionState, deps: AutonomousActionDeps): void {
 
     if (isEligibleForRest(pet, state.restCooldownExpiry.get(pet.id), now)) {
       if (Math.random() < effectiveRestProbability) {
-        deps.dispatchAutonomousRest(pet.id);
-
         // Create duration timer — when it fires, call endAutonomousRest
         const duration = generateRestDuration();
+
+        deps.dispatchAutonomousRest(pet.id, duration);
+
         const timer = setTimeout(() => {
           deps.endAutonomousRest(pet.id);
         }, duration);
