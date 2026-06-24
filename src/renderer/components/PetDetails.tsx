@@ -4,23 +4,22 @@ import { StatBar } from "./StatBar";
 import { getEvolutionReadiness } from "../../shared/pet/evolutionReadiness";
 import { resolveVariantId } from "../overlay/variantId";
 import { generatePersonalityNotes } from "../pet/personalityNotes";
+import type { ActionButtonStates } from "../hooks/useCooldownState";
+import type { UserActionType } from "../../shared/pet/actionTypes";
+import btnLeft from "../assets/button/left.png";
+import btnMid from "../assets/button/mid.png";
+import btnRight from "../assets/button/right.png";
 import "../styles/pet-details.css";
 
 interface PetDetailsProps {
   petState: PetState;
   onReset: () => void;
   onRename: (newName: string) => void;
-  onFeed: () => void;
-  onPlay: () => void;
-  onClean: () => void;
-  onRest: () => void;
+  onAction: (action: UserActionType) => void;
   onEvolve: () => void;
-  restDisabled?: boolean;
-  actionsDisabled?: boolean;
+  buttonStates: ActionButtonStates;
   evolving?: boolean;
   isResting?: boolean;
-  autonomousCountdown?: number | null;
-  autonomousActionName?: string | null;
 }
 
 function formatAge(hatchedAt: string): string {
@@ -57,17 +56,11 @@ export function PetDetails({
   petState,
   onReset,
   onRename,
-  onFeed,
-  onPlay,
-  onClean,
-  onRest,
+  onAction,
   onEvolve,
-  restDisabled,
-  actionsDisabled,
+  buttonStates,
   evolving,
   isResting,
-  autonomousCountdown,
-  autonomousActionName,
 }: PetDetailsProps) {
   const canRename = petState.lifeStage === "adult";
   const nextStage = getNextStageInfo(petState);
@@ -199,22 +192,21 @@ export function PetDetails({
       )}
 
       <div className="pet-details-actions">
-        <button type="button" onClick={onFeed} disabled={actionsDisabled}>
-          Feed
-        </button>
-        <button type="button" onClick={onPlay} disabled={actionsDisabled}>
-          {autonomousActionName === "playTogether" && autonomousCountdown != null
-            ? `${Math.floor(autonomousCountdown / 60)}:${String(autonomousCountdown % 60).padStart(2, "0")}`
-            : "Play"}
-        </button>
-        <button type="button" onClick={onClean} disabled={actionsDisabled}>
-          Clean
-        </button>
-        <button type="button" onClick={onRest} disabled={restDisabled || actionsDisabled}>
-          {autonomousActionName === "autonomousRest" && autonomousCountdown != null
-            ? `${Math.floor(autonomousCountdown / 60)}:${String(autonomousCountdown % 60).padStart(2, "0")}`
-            : "Rest"}
-        </button>
+        {(['feed', 'play', 'clean', 'rest'] as const).map((action) => (
+          <button
+            key={action}
+            type="button"
+            className={`pet-action-btn ${buttonStates[action].disabled ? 'pet-action-btn-disabled' : ''}`}
+            onClick={() => onAction(action)}
+            disabled={buttonStates[action].disabled}
+          >
+            <img src={btnLeft} className="pet-action-btn-left" alt="" />
+            <span className="pet-action-btn-mid" style={{ backgroundImage: `url(${btnMid})` }}>
+              {buttonStates[action].label}
+            </span>
+            <img src={btnRight} className="pet-action-btn-right" alt="" />
+          </button>
+        ))}
       </div>
     </div>
   );

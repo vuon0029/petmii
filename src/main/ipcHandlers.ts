@@ -26,6 +26,21 @@ import {
 } from "./windowManager";
 import { registerCareIncrementHandler } from "./careIncrementHandler";
 import { registerEvolutionHandlers } from "./evolutionHandler";
+import {
+  isPetBusy,
+  setAutonomousAction,
+  clearAutonomousAction,
+  getAutonomousActionInfo,
+  setResting,
+  clearResting,
+  setUserActionInProgress,
+  clearUserActionInProgress,
+  autonomousActionPetIds,
+  restingPetIds,
+} from "./runtimePetState";
+import { getPetActionAvailability, applyUserAction } from "./actionValidator";
+import { applyAutonomousRestBenefits, applyPlayTogetherBenefits } from "./autonomousBenefits";
+import type { UserActionType } from "../shared/pet/actionTypes";
 
 export function registerIpcHandlers(): void {
   // ===== Game State =====
@@ -200,11 +215,8 @@ export function registerIpcHandlers(): void {
 
   // ===== REST Action =====
 
-  // Track which pets are currently resting in the overlay (survives window remount)
-  const restingPetIds = new Set<string>();
-
   ipcMain.on("pet:rest-start", (_, data: { petId: string }) => {
-    restingPetIds.add(data.petId);
+    setResting(data.petId);
     const overlay = getOverlayWindow();
     if (overlay && !overlay.isDestroyed()) {
       overlay.webContents.send("overlay:rest-command", data);
@@ -212,7 +224,7 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.on("pet:rest-ended", (_, data: { petId: string; completed: boolean }) => {
-    restingPetIds.delete(data.petId);
+    clearResting(data.petId);
     const mainWin = getMainWindow();
     if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send("pet:rest-ended", data);
@@ -232,19 +244,41 @@ export function registerIpcHandlers(): void {
   });
 
   // ===== Autonomous Actions =====
-  const autonomousActionPetIds = new Map<string, { action: string; endTime: number }>();
 
   ipcMain.on("pet:autonomous-action-started", (_, data: { petId: string; action: string; durationMs?: number }) => {
     const endTime = data.durationMs ? Date.now() + data.durationMs : Date.now() + 45000;
-    autonomousActionPetIds.set(data.petId, { action: data.action, endTime });
+    setAutonomousAction(data.petId, data.action, endTime);
     const mainWin = getMainWindow();
     if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send("pet:autonomous-action-started", data);
     }
   });
 
-  ipcMain.on("pet:autonomous-action-ended", (_, data: { petId: string; action: string }) => {
-    autonomousActionPetIds.delete(data.petId);
+  ipcMain.on("pet:autonomous-action-ended", (_, data: { petId: string; action: string; completed?: boolean }) => {
+    clearAutonomousAction(data.petId);
+
+    // Apply benefits only if the action completed (not interrupted).
+    // Default to true for backwards compatibility.
+    if (data.completed !== false) {
+      const game = loadGameState();
+      const pet = game.pets.find(p => p.id === data.petId);
+      if (pet) {
+        if (data.action === 'autonomousRest') {
+          applyAutonomousRestBenefits(pet);
+        } else if (data.action === 'playTogether') {
+          applyPlayTogetherBenefits(pet);
+        }
+        saveGameState(game);
+
+        // Broadcast updated game state to all windows
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("game:state-update", game);
+          }
+        }
+      }
+    }
+
     const mainWin = getMainWindow();
     if (mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send("pet:autonomous-action-ended", data);
@@ -256,10 +290,55 @@ export function registerIpcHandlers(): void {
   });
 
   ipcMain.handle("pet:get-autonomous-action-info", (_, petId: string) => {
-    const info = autonomousActionPetIds.get(petId);
+    const info = getAutonomousActionInfo(petId);
     if (!info) return null;
     const remainingMs = Math.max(0, info.endTime - Date.now());
     return { action: info.action, remainingMs };
+  });
+
+  // ===== Pet Action (User-Triggered with Cooldown Validation) =====
+
+  ipcMain.handle("pet:action", async (_, payload: { petId: string; action: string }) => {
+    const { petId, action } = payload;
+
+    // Validate action type
+    const validActions: UserActionType[] = ['feed', 'play', 'rest', 'clean'];
+    if (!validActions.includes(action as UserActionType)) {
+      return { available: false, message: 'Invalid action type' };
+    }
+
+    // Load state
+    const game = loadGameState();
+    const pet = game.pets.find(p => p.id === petId);
+    if (!pet) {
+      return { available: false, message: 'Pet not found' };
+    }
+
+    // Check availability (pure)
+    const isBusy = isPetBusy(petId);
+    const availability = getPetActionAvailability(pet, action as UserActionType, isBusy);
+
+    if (!availability.available) {
+      return availability;
+    }
+
+    // Apply effects with userActionInProgress safety
+    try {
+      setUserActionInProgress(petId);
+      applyUserAction(pet, action as UserActionType);
+      saveGameState(game);
+
+      // Broadcast game:state-update to all windows
+      BrowserWindow.getAllWindows().forEach(win => {
+        if (!win.isDestroyed()) {
+          win.webContents.send("game:state-update", game);
+        }
+      });
+    } finally {
+      clearUserActionInProgress(petId);
+    }
+
+    return { available: true };
   });
 
   // ===== Graveyard =====

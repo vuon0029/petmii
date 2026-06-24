@@ -207,6 +207,55 @@
   font-size: 0.9rem;
 }
 
+/* Image-based action buttons (left.png + mid.png repeating + right.png) */
+.pet-action-btn {
+  display: inline-flex;
+  align-items: stretch;
+  height: 40px;
+  border: none !important;
+  background: none !important;
+  padding: 0 !important;
+  cursor: pointer;
+  font-family: "Press Start 2P", monospace;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.pet-action-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: none;
+}
+
+.pet-action-btn:active:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.pet-action-btn-disabled {
+  opacity: 0.5;
+  cursor: default;
+  filter: grayscale(0.3);
+}
+
+.pet-action-btn-left,
+.pet-action-btn-right {
+  display: block;
+  height: 40px;
+  width: auto;
+}
+
+.pet-action-btn-mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  background-repeat: repeat-x;
+  background-size: auto 40px;
+  padding: 0 4px;
+  font-size: 0.7rem;
+  color: #0000;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
 /* Personality Notes */
 .personality-notes {
   width: 100%;

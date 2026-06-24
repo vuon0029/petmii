@@ -120,6 +120,9 @@ declare global {
       loadGraveyard(): Promise<GraveyardEntry[]>;
       removeFromGraveyard(id: string): Promise<boolean>;
 
+      // User Actions
+      performAction(payload: { petId: string; action: string }): Promise<unknown>;
+
       // Care History
       careIncrement(payload: { petId: string; action: string; metadata?: unknown }): Promise<{ success: boolean; reason?: string }>;
 

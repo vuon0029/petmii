@@ -2,6 +2,7 @@
 // Type definitions and constants for pet variants, state, and defaults.
 
 import type { CareHistory, AdultTrait } from "../../shared/pet/careHistory";
+import type { PetActionCooldowns } from "../../shared/pet/actionTypes";
 
 export type PetSpecies = "blob" | "frog";
 export type PetColor = "yellow" | "blue" | "pink" | "shiny";
@@ -69,6 +70,7 @@ export interface PetState {
   // Care history and evolution
   careHistory?: CareHistory;
   adultTrait?: AdultTrait;
+  actionCooldowns?: PetActionCooldowns;
 }
 
 export const DEFAULT_PET_STATS = {

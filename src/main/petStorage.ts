@@ -13,6 +13,7 @@ import type {
   PetLifeStage,
 } from "../renderer/pet/petVariant";
 import { createDefaultCareHistory, type AdultTrait } from "../shared/pet/careHistory";
+import { sanitizeCooldowns } from "../shared/pet/cooldownUtils";
 
 // ===== Types =====
 
@@ -217,6 +218,11 @@ function migratePetCareFields(pet: PetState): void {
   }
   if (pet.lifeStage === "adult" && !pet.adultTrait) {
     pet.adultTrait = "Classic";
+  }
+  if (pet.actionCooldowns === undefined || pet.actionCooldowns === null) {
+    pet.actionCooldowns = {};
+  } else {
+    pet.actionCooldowns = sanitizeCooldowns(pet.actionCooldowns);
   }
 }
 

@@ -94,6 +94,10 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
   careIncrement: (payload: { petId: string; action: string; metadata?: unknown }) =>
     ipcRenderer.invoke("care:increment", payload),
 
+  // User Actions
+  performAction: (payload: { petId: string; action: string }) =>
+    ipcRenderer.invoke("pet:action", payload),
+
   // Evolution
   evolveStart: (payload: { petId: string; sessionId: string }) =>
     ipcRenderer.send("evolve:start", payload),

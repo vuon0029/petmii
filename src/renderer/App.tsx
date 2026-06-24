@@ -11,6 +11,9 @@ import { RenamePetModal } from "./components/RenamePetModal";
 import { DeathScreen } from "./components/DeathScreen";
 import { EggList } from "./components/EggList";
 import { ResourceMonitor } from "./components/ResourceMonitor";
+import { usePetActions } from './hooks/usePetActions';
+import { useCooldownState } from './hooks/useCooldownState';
+import type { UserActionType } from '../shared/pet/actionTypes';
 import type { GameState } from "./types";
 
 type AppView = "loading" | "egg-ready" | "hatching" | "pets" | "death";
@@ -155,6 +158,14 @@ export function App() {
   // Selected pet from game state
   const selectedPet = game?.pets[selectedPetIndex] || null;
 
+  // New cooldown system hooks
+  const { performAction } = usePetActions(selectedPet?.id ?? null);
+  const isBusy = isRestingInOverlay || isAutonomousActionActive || evolvingPetId === selectedPet?.id;
+  const autonomousActionInfo = (isAutonomousActionActive && autonomousActionName && autonomousEndTimeRef.current)
+    ? { action: autonomousActionName, endTime: autonomousEndTimeRef.current }
+    : null;
+  const buttonStates = useCooldownState(selectedPet, isBusy, autonomousActionInfo);
+
   // Sync rest button when selected pet changes
   useEffect(() => {
     if (!selectedPet || !overlayOn) {
@@ -291,44 +302,16 @@ export function App() {
     setGame(fresh);
   }
 
-  async function handleFeed() {
+  const handleAction = useCallback(async (action: UserActionType) => {
     if (!selectedPet) return;
-    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
-    const updated = applyAction(selectedPet, "feed");
-    await savePet(updated);
-    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "feed" });
-  }
-
-  async function handlePlay() {
-    if (!selectedPet || selectedPet.energy < 10) return;
-    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
-    const updated = applyAction(selectedPet, "play");
-    await savePet(updated);
-    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "play" });
-  }
-
-  async function handleClean() {
-    if (!selectedPet) return;
-    if (isRestingInOverlay || isAutonomousActionActive) return; // Block interaction while resting/autonomous
-    const updated = applyAction(selectedPet, "clean");
-    await savePet(updated);
-    window.petmiiAPI.careIncrement({ petId: selectedPet.id, action: "clean" });
-  }
-
-  async function handleRest() {
-    if (!selectedPet) return;
-    if (isRestingInOverlay || isAutonomousActionActive) return; // Already resting/autonomous — ignore
-
-    if (overlayOn) {
-      // Send REST command to overlay via IPC (Req 8.1)
+    // Special handling for rest when overlay is on (still needs overlay animation)
+    if (action === 'rest' && overlayOn && !isRestingInOverlay && !isAutonomousActionActive) {
       window.petmiiAPI.startOverlayRest({ petId: selectedPet.id });
-      setIsRestingInOverlay(true); // Disable button (Req 8.9)
-    } else {
-      // Direct stat application (no overlay active)
-      const updated = applyAction(selectedPet, "rest");
-      await savePet(updated);
+      setIsRestingInOverlay(true);
+      return;
     }
-  }
+    await performAction(action);
+  }, [selectedPet, overlayOn, isRestingInOverlay, isAutonomousActionActive, performAction]);
 
   function handleEvolve() {
     if (!selectedPet || evolvingPetId === selectedPet.id) return;
@@ -491,17 +474,11 @@ export function App() {
                   if (selectedPet.lifeStage === "adult")
                     setShowRenameModal(true);
                 }}
-                onFeed={handleFeed}
-                onPlay={handlePlay}
-                onClean={handleClean}
-                onRest={handleRest}
+                onAction={handleAction}
                 onEvolve={handleEvolve}
-                restDisabled={isRestingInOverlay || isAutonomousActionActive}
-                actionsDisabled={isRestingInOverlay || isAutonomousActionActive}
+                buttonStates={buttonStates}
                 evolving={evolvingPetId === selectedPet.id}
                 isResting={isRestingInOverlay || (isAutonomousActionActive && autonomousActionName === "autonomousRest")}
-                autonomousCountdown={autonomousCountdown}
-                autonomousActionName={autonomousActionName}
               />
               {showRenameModal && (
                 <RenamePetModal
@@ -693,57 +670,3 @@ function getRevealBody(reveal: { petName: string; newStage: string; adultTrait: 
   }
 }
 
-// ===== Action helpers =====
-
-function clamp(value: number, min = 0, max = 100): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function applyAction(
-  pet: PetState,
-  action: "feed" | "play" | "clean" | "rest",
-): PetState {
-  const now = new Date().toISOString();
-  const AMOUNT = 20;
-  const BOND = 2;
-
-  switch (action) {
-    case "feed":
-      return {
-        ...pet,
-        hunger: clamp(pet.hunger + AMOUNT),
-        energy: clamp(pet.energy + 5),
-        bond: clamp(pet.bond + BOND),
-        lastFedAt: now,
-        updatedAt: now,
-      };
-    case "play":
-      return {
-        ...pet,
-        happiness: clamp(pet.happiness + AMOUNT),
-        energy: clamp(pet.energy - 10),
-        hunger: clamp(pet.hunger - 5),
-        bond: clamp(pet.bond + BOND),
-        lastPlayedAt: now,
-        updatedAt: now,
-      };
-    case "clean":
-      return {
-        ...pet,
-        cleanliness: clamp(pet.cleanliness + 25),
-        happiness: clamp(pet.happiness + 5),
-        bond: clamp(pet.bond + BOND),
-        lastCleanedAt: now,
-        updatedAt: now,
-      };
-    case "rest":
-      return {
-        ...pet,
-        energy: clamp(pet.energy + 25),
-        hunger: clamp(pet.hunger - 5),
-        bond: clamp(pet.bond + BOND),
-        lastRestedAt: now,
-        updatedAt: now,
-      };
-  }
-}
