@@ -128,6 +128,11 @@ contextBridge.exposeInMainWorld("petmiiAPI", {
   // Cursor position (for cursor attraction controller)
   getCursorPosition: () => ipcRenderer.invoke("get-cursor-position") as Promise<{ x: number; y: number }>,
 
+  // Media playback state (for dance feature)
+  onMediaPlaybackState: (callback: (state: unknown) => void) => {
+    ipcRenderer.on("media:playback-state", (_, state) => callback(state));
+  },
+
   // System
   getSystemMetrics: () => ipcRenderer.invoke("system:get-metrics"),
 });

@@ -26,6 +26,13 @@ import {
 } from "./windowManager";
 import { registerCareIncrementHandler } from "./careIncrementHandler";
 import { registerEvolutionHandlers } from "./evolutionHandler";
+import { createMediaPlaybackService, destroyMediaPlaybackService, MediaPlaybackServiceState } from "./mediaPlaybackService";
+import { NoopMediaProvider } from "./mediaProvider";
+import { LinuxMprisProvider } from "./linuxMprisProvider";
+import type { MediaProvider } from "./mediaProvider";
+import type { MediaPlaybackState } from "../shared/media/mediaTypes";
+import { execFileSync, execFile } from "child_process";
+import { promisify } from "util";
 import {
   isPetBusy,
   setAutonomousAction,
@@ -358,4 +365,180 @@ export function registerIpcHandlers(): void {
   // ===== Care History & Evolution =====
   registerCareIncrementHandler();
   registerEvolutionHandlers();
+
+  // ===== Media Playback Service (Dance Feature) =====
+  registerMediaPlaybackIpc();
+}
+
+// ─── Media Playback IPC ───
+
+let mediaServiceState: MediaPlaybackServiceState | null = null;
+
+function registerMediaPlaybackIpc(): void {
+  // The overlay window may not exist yet at registration time.
+  // Poll for it every 2 seconds until it appears, then start the service.
+  const checkInterval = setInterval(() => {
+    const overlay = getOverlayWindow();
+    if (overlay && !overlay.isDestroyed()) {
+      clearInterval(checkInterval);
+      startMediaPlaybackService(overlay);
+    }
+  }, 2000);
+}
+
+export function startMediaPlaybackService(overlay: BrowserWindow): void {
+  if (mediaServiceState) return; // Already running
+
+  // Choose provider based on environment:
+  // Try WindowsMediaProvider first (works in WSL2 and native Windows via powershell.exe)
+  // Fall back to LinuxMprisProvider on native Linux
+  // Fall back to NoopMediaProvider if nothing works
+  //
+  // Detection: check if powershell.exe is reachable (works in WSL2)
+  let useWindows = false;
+  try {
+    execFileSync("powershell.exe", ["-NoProfile", "-Command", "echo ok"], { timeout: 2000, stdio: "pipe" });
+    useWindows = true;
+  } catch {
+    // powershell.exe not available
+  }
+
+  let provider: MediaProvider;
+  if (useWindows) {
+    console.log("[petmii:media] powershell.exe available — using WindowsMediaProvider");
+    provider = new InlineWindowsMediaProvider();
+  } else if (process.platform === "linux") {
+    console.log("[petmii:media] Native Linux — using LinuxMprisProvider");
+    provider = new LinuxMprisProvider();
+  } else {
+    console.log("[petmii:media] No media detection available — using NoopMediaProvider");
+    provider = new NoopMediaProvider();
+  }
+
+  mediaServiceState = createMediaPlaybackService(provider, (state) => {
+    if (overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send("media:playback-state", state);
+    }
+  });
+}
+
+export function stopMediaPlaybackService(): void {
+  if (mediaServiceState) {
+    destroyMediaPlaybackService(mediaServiceState);
+    mediaServiceState = null;
+  }
+}
+
+// ─── Inline Windows Media Provider (avoids module resolution issues with electron-vite) ───
+
+const execFileAsync = promisify(execFile);
+
+const PS_MEDIA_SCRIPT = [
+  "$ErrorActionPreference = 'SilentlyContinue'",
+  "",
+  "# Hybrid detection: window title + audio session check via tasklist",
+  "# tasklist /fi shows if processes are using audio (have a 'Playing' status in their window title)",
+  "# Chrome/Edge append a speaker icon or change title when audio is playing",
+  "",
+  "# Method: Check browser window titles for playback indicators",
+  "# Chrome: title shows tab name when playing; we also look for the playing indicator",
+  "# Firefox: title changes to include media title when playing",
+  "$players = @()",
+  "",
+  "# Get browser processes with window titles",
+  "$browsers = Get-Process -Name chrome,msedge,firefox 2>$null | Where-Object { $_.MainWindowTitle -ne '' }",
+  "foreach ($b in $browsers) {",
+  "  $name = $b.ProcessName.ToLower()",
+  "  $title = $b.MainWindowTitle",
+  "  $players += \"Playing`t$name`t$title`t\"",
+  "}",
+  "",
+  "# Spotify desktop (title shows track name when playing, just 'Spotify' when paused)",
+  "$spotify = Get-Process -Name Spotify 2>$null | Where-Object { $_.MainWindowTitle -ne '' -and $_.MainWindowTitle -ne 'Spotify' -and $_.MainWindowTitle -ne 'Spotify Premium' -and $_.MainWindowTitle -ne 'Spotify Free' }",
+  "if ($spotify) {",
+  "  $players += \"Playing`tspotify`t$($spotify.MainWindowTitle)`t\"",
+  "}",
+  "",
+  "if ($players.Count -gt 0) {",
+  "  Write-Output $players[0]",
+  "} else {",
+  "  Write-Output 'NO_SESSION'",
+  "}",
+].join("\n");
+
+class InlineWindowsMediaProvider implements MediaProvider {
+  private psAvailable: boolean | null = null;
+
+  async poll(): Promise<MediaPlaybackState> {
+    const now = Date.now();
+
+    if (this.psAvailable === null) {
+      try {
+        await execFileAsync("powershell.exe", ["-NoProfile", "-Command", "echo ok"], { timeout: 3000 });
+        this.psAvailable = true;
+      } catch {
+        console.warn("[petmii] powershell.exe media query failed — disabling WindowsMediaProvider");
+        this.psAvailable = false;
+      }
+    }
+
+    if (!this.psAvailable) {
+      return { isPlaying: false, detectedAt: now };
+    }
+
+    try {
+      const { stdout } = await execFileAsync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", PS_MEDIA_SCRIPT],
+        { timeout: 4000 },
+      );
+      const trimmed = stdout.trim();
+      console.log("[petmii:media] PowerShell raw output:", JSON.stringify(trimmed));
+      return this.parseOutput(trimmed, now);
+    } catch (err) {
+      console.log("[petmii:media] PowerShell poll error:", (err as Error).message?.slice(0, 100));
+      return { isPlaying: false, detectedAt: now };
+    }
+  }
+
+  private parseOutput(output: string, now: number): MediaPlaybackState {
+    if (!output || output === "NO_SESSION" || output === "ERROR") {
+      return { isPlaying: false, detectedAt: now };
+    }
+
+    const parts = output.split("\t");
+    const [status, appId, title, artist] = parts;
+
+    const isPlaying = status?.toLowerCase() === "playing";
+    const sourceApp = this.normalizeAppId(appId);
+
+    const state: MediaPlaybackState = {
+      isPlaying,
+      detectedAt: now,
+    };
+
+    if (sourceApp) state.sourceApp = sourceApp;
+    if (title) state.title = title;
+    if (artist) state.artist = artist;
+    if (sourceApp && this.isBrowser(sourceApp) && title) {
+      state.tabTitle = title;
+    }
+
+    return state;
+  }
+
+  private normalizeAppId(appId: string | undefined): string | undefined {
+    if (!appId) return undefined;
+    const lower = appId.toLowerCase();
+    if (lower.includes("chrome")) return "chrome";
+    if (lower.includes("firefox")) return "firefox";
+    if (lower.includes("msedge") || lower.includes("edge")) return "edge";
+    if (lower.includes("spotify")) return "spotify";
+    return appId;
+  }
+
+  private isBrowser(sourceApp: string): boolean {
+    const lower = sourceApp.toLowerCase();
+    return lower === "chrome" || lower === "firefox" || lower === "edge";
+  }
 }

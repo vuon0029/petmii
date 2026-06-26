@@ -104,7 +104,7 @@ export function resolveSprite(
   species: string,
   variantId: string,
   lifeStage: string,
-  visualState: "idle" | "sleep",
+  visualState: string,
   registry: SpriteRegistry
 ): ResolvedSprite | null {
   // Step 1: Exact match — species/variantId/lifeStage + requested visualState
