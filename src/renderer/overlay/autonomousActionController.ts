@@ -129,6 +129,8 @@ export function isEligibleForRest(
   if (pet.currentAction !== "idle") return false;
   if (pet.lifecycleState === "evolving") return false;
   if (cooldownExpiry !== undefined && now < cooldownExpiry) return false;
+  // Don't rest if energy is already full
+  if (pet.pet.energy >= 100) return false;
   return true;
 }
 
@@ -142,6 +144,8 @@ export function isEligibleForPlay(
   if (pet.currentAction !== "idle") return false;
   if (pet.lifecycleState === "evolving") return false;
   if (cooldownExpiry !== undefined && now < cooldownExpiry) return false;
+  // Don't play if happiness is already full
+  if (pet.pet.happiness >= 100) return false;
   return true;
 }
 

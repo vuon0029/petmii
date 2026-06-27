@@ -28,7 +28,8 @@ export type ControlledActionName =
   | "sleep"
   | "approachCursor"
   | "autonomousRest"
-  | "playTogether";
+  | "playTogether"
+  | "dance";
 
 // Full union for currentAction typing
 export type ActionName = AmbientActionName | ControlledActionName;

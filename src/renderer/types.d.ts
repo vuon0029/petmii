@@ -146,6 +146,9 @@ declare global {
 
       // Cursor position (for cursor attraction controller)
       getCursorPosition(): Promise<{ x: number; y: number }>;
+
+      // Media playback state (for dance feature)
+      onMediaPlaybackState(callback: (state: import("../shared/media/mediaTypes").MediaPlaybackState) => void): void;
     };
   }
 }

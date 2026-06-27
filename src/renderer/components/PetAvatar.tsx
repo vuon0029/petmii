@@ -6,7 +6,7 @@ export interface PetAvatarProps {
   species: string;
   variantId: string;
   lifeStage: string;
-  visualState: "idle" | "sleep";
+  visualState: "idle" | "sleep" | "dance";
   personality: string;
   static?: boolean;
 }

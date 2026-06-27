@@ -57,6 +57,20 @@ import childShinyBlobSleep from "./blob/shiny/child_sleep.png";
 import adultShinyBlob from "./blob/shiny/adult.png";
 import adultShinyBlobSleep from "./blob/shiny/adult_sleep.png";
 
+// --- Blob dance sprite imports ---
+import babyBlueBlobDance from "./blob/blue/baby_dance.png";
+import childBlueBlobDance from "./blob/blue/child_dance.png";
+import adultBlueBlobDance from "./blob/blue/adult_dance.png";
+import babyPinkBlobDance from "./blob/pink/baby_dance.png";
+import childPinkBlobDance from "./blob/pink/child_dance.png";
+import adultPinkBlobDance from "./blob/pink/adult_dance.png";
+import babyYellowBlobDance from "./blob/yellow/baby_dance.png";
+import childYellowBlobDance from "./blob/yellow/child_dance.png";
+import adultYellowBlobDance from "./blob/yellow/adult_dance.png";
+import babyShinyBlobDance from "./blob/shiny/baby_dance.png";
+import childShinyBlobDance from "./blob/shiny/child_dance.png";
+import adultShinyBlobDance from "./blob/shiny/adult_dance.png";
+
 // --- Frog sprite imports ---
 
 import babyYellowFrog from "./frog/yellow/baby.png";
@@ -87,75 +101,61 @@ import childShinyFrogSleep from "./frog/shiny/child_sleep.png";
 import adultShinyFrog from "./frog/shiny/adult.png";
 import adultShinyFrogSleep from "./frog/shiny/adult_sleep.png";
 
+// --- Frog dance sprite imports (no baby_dance for frogs) ---
+import childYellowFrogDance from "./frog/yellow/child_dance.png";
+import adultYellowFrogDance from "./frog/yellow/adult_dance.png";
+import childBlueFrogDance from "./frog/blue/child_dance.png";
+import adultBlueFrogDance from "./frog/blue/adult_dance.png";
+import childPinkFrogDance from "./frog/pink/child_dance.png";
+import adultPinkFrogDance from "./frog/pink/adult_dance.png";
+import childShinyFrogDance from "./frog/shiny/child_dance.png";
+import adultShinyFrogDance from "./frog/shiny/adult_dance.png";
+
 // --- New SpriteRegistry structure (species/variantId/lifeStage/visualState) ---
 
 export const spriteRegistry: SpriteRegistry = {
   blob: {
     blue: {
-      baby: { idle: { src: babyBlueBlob }, sleep: {
-        src: babyBlueBlobSleep
-      }  },
-      child: { idle: { src: childBlueBlob }, sleep: {
-        src: childBlueBlobSleep
-      }  },
-      adult: { idle: { src: adultBlueBlob, metadata: { frameCount: 9 } }, sleep: {src: adultBlueBlobSleep, metadata: { frameCount: 9 }}  },
+      baby: { idle: { src: babyBlueBlob }, sleep: { src: babyBlueBlobSleep, metadata: { frameCount: 9 } }, dance: { src: babyBlueBlobDance, metadata: { frameCount: 1 } } },
+      child: { idle: { src: childBlueBlob }, sleep: { src: childBlueBlobSleep, metadata: { frameCount: 9 } }, dance: { src: childBlueBlobDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultBlueBlob, metadata: { frameCount: 9 } }, sleep: { src: adultBlueBlobSleep, metadata: { frameCount: 9 } }, dance: { src: adultBlueBlobDance, metadata: { frameCount: 1 } } },
     },
     pink: {
-      baby: { idle: { src: babyPinkBlob }, sleep: {
-        src: babyPinkBlobSleep
-      }  },
-      child: { idle: { src: childPinkBlob }, sleep: {
-        src: childPinkBlobSleep
-      }  },
-      adult: { idle: { src: adultPinkBlob, metadata: { frameCount: 9 } }, sleep: {src: adultPinkBlobSleep, metadata: { frameCount: 9 }}  },
+      baby: { idle: { src: babyPinkBlob }, sleep: { src: babyPinkBlobSleep, metadata: { frameCount: 9 } }, dance: { src: babyPinkBlobDance, metadata: { frameCount: 1 } } },
+      child: { idle: { src: childPinkBlob }, sleep: { src: childPinkBlobSleep, metadata: { frameCount: 9 } }, dance: { src: childPinkBlobDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultPinkBlob, metadata: { frameCount: 9 } }, sleep: { src: adultPinkBlobSleep, metadata: { frameCount: 9 } }, dance: { src: adultPinkBlobDance, metadata: { frameCount: 1 } } },
     },
     yellow: {
-      baby: { idle: { src: babyYellowBlob }, sleep: {
-        src: babyYellowBlobSleep
-      }  },
-      child: { idle: { src: childYellowBlob }, sleep: {
-        src: childYellowBlobSleep
-      }  },
-      adult: { idle: { src: adultYellowBlob, metadata: { frameCount: 9 } }, sleep: {src: adultYellowBlobSleep, metadata: { frameCount: 9 }}  },
+      baby: { idle: { src: babyYellowBlob }, sleep: { src: babyYellowBlobSleep, metadata: { frameCount: 9 } }, dance: { src: babyYellowBlobDance, metadata: { frameCount: 1 } } },
+      child: { idle: { src: childYellowBlob }, sleep: { src: childYellowBlobSleep, metadata: { frameCount: 9 } }, dance: { src: childYellowBlobDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultYellowBlob, metadata: { frameCount: 9 } }, sleep: { src: adultYellowBlobSleep, metadata: { frameCount: 9 } }, dance: { src: adultYellowBlobDance, metadata: { frameCount: 1 } } },
     },
     shiny: {
-      baby: { idle: { src: babyShinyBlob }, sleep: {
-        src: babyShinyBlobSleep
-      }   },
-      child: { idle: { src: childShinyBlob }, sleep: {
-        src: childShinyBlobSleep
-      }  },
-      adult: { idle: { src: adultShinyBlob, metadata: { frameCount: 9 } }, sleep: {src: adultShinyBlobSleep, metadata: { frameCount: 9 }}  },
+      baby: { idle: { src: babyShinyBlob }, sleep: { src: babyShinyBlobSleep, metadata: { frameCount: 9 } }, dance: { src: babyShinyBlobDance, metadata: { frameCount: 1 } } },
+      child: { idle: { src: childShinyBlob }, sleep: { src: childShinyBlobSleep, metadata: { frameCount: 9 } }, dance: { src: childShinyBlobDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultShinyBlob, metadata: { frameCount: 9 } }, sleep: { src: adultShinyBlobSleep, metadata: { frameCount: 9 } }, dance: { src: adultShinyBlobDance, metadata: { frameCount: 1 } } },
     },
   },
   frog: {
     blue: {
-      baby: { idle: { src: babyBlueFrog }, sleep: {
-        src: babyBlueFrogSleep
-      } },
-      child: { idle: { src: childBlueFrog, metadata: { frameCount: 9 } }, sleep: {src: childBlueFrogSleep, metadata: { frameCount: 9 }} },
-      adult: { idle: { src: adultBlueFrog, metadata: { frameCount: 9 }  }, sleep: {src: adultBlueFrogSleep, metadata: { frameCount: 9 }} },
+      baby: { idle: { src: babyBlueFrog }, sleep: { src: babyBlueFrogSleep} },
+      child: { idle: { src: childBlueFrog, metadata: { frameCount: 9 } }, sleep: { src: childBlueFrogSleep, metadata: { frameCount: 9 } }, dance: { src: childBlueFrogDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultBlueFrog, metadata: { frameCount: 9 } }, sleep: { src: adultBlueFrogSleep, metadata: { frameCount: 9 } }, dance: { src: adultBlueFrogDance, metadata: { frameCount: 1 } } },
     },
     pink: {
-      baby: { idle: { src: babyPinkFrog }, sleep: {
-        src: babyPinkFrogSleep
-      } },
-      child: { idle: { src: childPinkFrog, metadata: { frameCount: 9 } }, sleep: {src: childPinkFrogSleep, metadata: { frameCount: 9 }} },
-      adult: { idle: { src: adultPinkFrog, metadata: { frameCount: 9 }  }, sleep: {src: adultPinkFrogSleep, metadata: { frameCount: 9 }} },
+      baby: { idle: { src: babyPinkFrog }, sleep: { src: babyPinkFrogSleep } },
+      child: { idle: { src: childPinkFrog, metadata: { frameCount: 9 } }, sleep: { src: childPinkFrogSleep, metadata: { frameCount: 9 } }, dance: { src: childPinkFrogDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultPinkFrog, metadata: { frameCount: 9 } }, sleep: { src: adultPinkFrogSleep, metadata: { frameCount: 9 } }, dance: { src: adultPinkFrogDance, metadata: { frameCount: 1 } } },
     },
     yellow: {
-      baby: { idle: { src: babyYellowFrog }, sleep: {
-        src: babyYellowFrogSleep
-      } },
-      child: { idle: { src: childYellowFrog, metadata: { frameCount: 9 } }, sleep: {src: childYellowFrogSleep, metadata: { frameCount: 9 }} },
-      adult: { idle: { src: adultYellowFrog, metadata: { frameCount: 9 } }, sleep: {src: adultYellowFrogSleep, metadata: { frameCount: 9 }}  },
+      baby: { idle: { src: babyYellowFrog }, sleep: { src: babyYellowFrogSleep } },
+      child: { idle: { src: childYellowFrog, metadata: { frameCount: 9 } }, sleep: { src: childYellowFrogSleep, metadata: { frameCount: 9 } }, dance: { src: childYellowFrogDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultYellowFrog, metadata: { frameCount: 9 } }, sleep: { src: adultYellowFrogSleep, metadata: { frameCount: 9 } }, dance: { src: adultYellowFrogDance, metadata: { frameCount: 1 } } },
     },
     shiny: {
-      baby: { idle: { src: babyShinyFrog }, sleep: {
-        src: babyShinyFrogSleep
-      } },
-      child: { idle: { src: childShinyFrog, metadata: { frameCount: 9 } }, sleep: {src: childShinyFrogSleep, metadata: { frameCount: 9 }} },
-      adult: { idle: { src: adultShinyFrog, metadata: { frameCount: 9 }  }, sleep: {src: adultShinyFrogSleep, metadata: { frameCount: 9 }} },
+      baby: { idle: { src: babyShinyFrog }, sleep: { src: babyShinyFrogSleep } },
+      child: { idle: { src: childShinyFrog, metadata: { frameCount: 9 } }, sleep: { src: childShinyFrogSleep, metadata: { frameCount: 9 } }, dance: { src: childShinyFrogDance, metadata: { frameCount: 1 } } },
+      adult: { idle: { src: adultShinyFrog, metadata: { frameCount: 9 } }, sleep: { src: adultShinyFrogSleep, metadata: { frameCount: 9 } }, dance: { src: adultShinyFrogDance, metadata: { frameCount: 1 } } },
     },
   },
 };

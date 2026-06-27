@@ -10,6 +10,8 @@ import { resolveVariantId } from "./overlay/variantId";
 import { createCursorAttractionController, destroyCursorAttractionController, notifyApproachEnded, resolveApproachAmbientAction, computeSlotOffsetY, CursorAttractionState, CursorAttractionDeps, MOUSE_ATTRACT_SPEED_MULTIPLIER, MOUSE_ATTRACT_PAUSE_MULTIPLIER } from "./overlay/cursorAttractionController";
 import { getEligibleBlockers, checkOverlap, computeApproachStopX, BoundingBox, resolveCollision, detectHeadBump, validatePlayPositions, correctSpawnOverlap, COLLISION_BUFFER_PX } from "./overlay/collisionDetector";
 import { createAutonomousActionController, destroyAutonomousActionController, notifyAutonomousRestEnded, notifyPlayTogetherEnded, computeFacingDirections, generatePlaySpacing, selectPlayIcon, AutonomousActionState } from "./overlay/autonomousActionController";
+import { createDanceController, destroyDanceController, cancelDance, onMediaStateUpdate, DanceControllerState, DanceControllerDeps, DanceFeatureSettings, DancePetInfo, DANCE_DURATION_MS } from "./overlay/danceController";
+import { DanceNotes } from "./overlay/components/DanceNotes";
 import { getCursorPos } from "./overlay/getCursorPos";
 import { shouldCountPickup } from "./overlay/pickedUpTracker";
 import { classifyRelease, onWallCollision, createThrowSequenceState, ThrowSequenceState } from "./overlay/throwTracker";
@@ -39,7 +41,7 @@ const ANGULAR_DAMPING = 0.95;
 const WALL_PADDING = 4;
 const AIR_RELEASE_THRESHOLD_PX = 40;
 
-export type VisualState = "idle" | "sleep";
+export type VisualState = "idle" | "sleep" | "dance";
 
 export interface PetOverlayState {
   id: string;
@@ -103,6 +105,8 @@ export function OverlayApp() {
   const evolutionAnimRef = useRef<EvolutionAnimationState | null>(null);
   const evolutionFrameRef = useRef<number>(0);
   const autonomousActionRef = useRef<AutonomousActionState | null>(null);
+  const danceControllerRef = useRef<DanceControllerState | null>(null);
+  const danceControllerDepsRef = useRef<DanceControllerDeps | null>(null);
   const [playTogetherIcon, setPlayTogetherIcon] = useState<string | null>(null);
   const playBurstTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [burstingPets, setBurstingPets] = useState<Set<string>>(new Set());
@@ -428,8 +432,8 @@ export function OverlayApp() {
             const pet = petsRef.current.find(p => p.id === petId);
             if (pet?.lifecycleState === "evolving") return;
 
-            // Skip dispatching if pet is in a non-ambient action (rest, autonomousRest, playTogether, approachCursor)
-            const nonAmbientActions: ActionName[] = ["rest", "autonomousRest", "playTogether", "approachCursor"];
+            // Skip dispatching if pet is in a non-ambient action (rest, autonomousRest, playTogether, approachCursor, dance)
+            const nonAmbientActions: ActionName[] = ["rest", "autonomousRest", "playTogether", "approachCursor", "dance"];
             if (pet && nonAmbientActions.includes(pet.currentAction)) return;
 
             if (action === "idle") {
@@ -634,6 +638,10 @@ export function OverlayApp() {
       if (pet.currentAction === "playTogether") {
         cancelPlayTogether(petId);
       }
+      // Cancel dance if active (approachCursor takes priority)
+      if (pet.currentAction === "dance" && danceControllerRef.current && danceControllerDepsRef.current) {
+        cancelDance(danceControllerRef.current, petId, danceControllerDepsRef.current, "approachCursor");
+      }
 
       // Compute direction based on target vs current X
       const dir: 1 | -1 = targetX >= pet.x ? 1 : -1;
@@ -713,7 +721,17 @@ export function OverlayApp() {
   function dispatchAutonomousRestFn(petId: string, durationMs: number) {
     const pet = petsRef.current.find(p => p.id === petId);
     if (!pet) return;
-    if (pet.physicsState !== "idle" || pet.currentAction !== "idle") return;
+    if (pet.physicsState !== "idle") return;
+
+    // Allow autonomousRest to preempt dance
+    if (pet.currentAction === "dance" && danceControllerRef.current && danceControllerDepsRef.current) {
+      cancelDance(danceControllerRef.current, petId, danceControllerDepsRef.current, "autonomousRest");
+    } else if (pet.currentAction !== "idle") {
+      return;
+    }
+
+    // Don't start rest if pet has an active movement animation in progress
+    if (movementCancelRef.current.has(petId)) return;
 
     const restY = computeResolvedRestY(getGroundY(), pet.resolvedProfile);
 
@@ -751,8 +769,22 @@ export function OverlayApp() {
     const pet1 = petsRef.current.find(p => p.id === petId1);
     const pet2 = petsRef.current.find(p => p.id === petId2);
     if (!pet1 || !pet2) return;
-    if (pet1.physicsState !== "idle" || pet1.currentAction !== "idle") return;
-    if (pet2.physicsState !== "idle" || pet2.currentAction !== "idle") return;
+
+    // Check pet1 eligibility
+    if (pet1.currentAction === "dance" && danceControllerRef.current && danceControllerDepsRef.current) {
+      cancelDance(danceControllerRef.current, petId1, danceControllerDepsRef.current, "playTogether");
+    } else if (pet1.physicsState !== "idle" || pet1.currentAction !== "idle") {
+      return;
+    }
+    if (movementCancelRef.current.has(petId1)) return;
+
+    // Check pet2 eligibility
+    if (pet2.currentAction === "dance" && danceControllerRef.current && danceControllerDepsRef.current) {
+      cancelDance(danceControllerRef.current, petId2, danceControllerDepsRef.current, "playTogether");
+    } else if (pet2.physicsState !== "idle" || pet2.currentAction !== "idle") {
+      return;
+    }
+    if (movementCancelRef.current.has(petId2)) return;
 
     // Compute meeting position — nudge pets close together within radius
     const spacing = generatePlaySpacing(); // 20-50px random gap
@@ -939,6 +971,67 @@ export function OverlayApp() {
     return () => {
       destroyAutonomousActionController(controller);
       autonomousActionRef.current = null;
+    };
+  }, []);
+
+  // Dance controller lifecycle
+  useEffect(() => {
+    const deps: DanceControllerDeps = {
+      getPets: () => {
+        return petsRef.current.map((p): DancePetInfo => ({
+          id: p.id,
+          physicsState: p.physicsState,
+          currentAction: p.currentAction,
+          lifecycleState: p.lifecycleState,
+          isAlive: p.pet.isAlive,
+          visualState: p.visualState,
+          stats: {
+            hunger: p.pet.hunger ?? 100,
+            happiness: p.pet.happiness ?? 100,
+            energy: p.pet.energy ?? 100,
+            cleanliness: p.pet.cleanliness ?? 100,
+          },
+        }));
+      },
+      getSettings: () => ({
+        danceToMusicEnabled: true,
+        danceToBrowserAudioEnabled: true,
+        simulateMusicPlaying: false,
+      }),
+      hasPendingMovement: (petId: string) => movementCancelRef.current.has(petId),
+      dispatchDance: (petId: string, _durationMs: number) => {
+        // Cancel any active movement animation so it doesn't overwrite dance back to idle
+        const cancelMovement = movementCancelRef.current.get(petId);
+        if (cancelMovement) {
+          cancelMovement();
+          movementCancelRef.current.delete(petId);
+        }
+        setPets(prev => prev.map(p =>
+          p.id === petId ? { ...p, currentAction: "dance" as ActionName, visualState: "dance" as VisualState } : p
+        ));
+      },
+      endDance: (petId: string, _completed: boolean) => {
+        setPets(prev => prev.map(p =>
+          p.id === petId && p.currentAction === "dance"
+            ? { ...p, currentAction: "idle" as ActionName, visualState: "idle" as VisualState }
+            : p
+        ));
+      },
+    };
+
+    danceControllerDepsRef.current = deps;
+    const controllerState = createDanceController(deps);
+    danceControllerRef.current = controllerState;
+
+    // Listen for media playback state IPC from main process
+    window.petmiiAPI.onMediaPlaybackState((state) => {
+      onMediaStateUpdate(controllerState, state);
+    });
+
+    return () => {
+      destroyDanceController(controllerState);
+      danceControllerRef.current = null;
+      danceControllerDepsRef.current = null;
     };
   }, []);
 
@@ -1355,6 +1448,10 @@ export function OverlayApp() {
       if (petState?.currentAction === "playTogether") {
         cancelPlayTogether(petId);
       }
+      // Cancel dance if active (drag takes ownership — don't reset to idle)
+      if (petState?.currentAction === "dance" && danceControllerRef.current) {
+        cancelDance(danceControllerRef.current, petId, danceControllerDepsRef.current!, "drag");
+      }
       // Start drag immediately — no click/drag threshold
       dragState.current = {
         petId,
@@ -1581,7 +1678,7 @@ export function OverlayApp() {
 
           {/* Pet sprite */}
           <div
-            className={`overlay-pet-body${burstingPets.has(p.id) ? " play-together-burst" : ""}`}
+            className={`overlay-pet-body${burstingPets.has(p.id) ? " play-together-burst" : ""}${p.currentAction === "dance" ? " pet-dance" : ""}`}
             style={{
               width: `${PET_BASE_SIZE}px`,
               height: `${PET_BASE_SIZE}px`,
@@ -1599,6 +1696,16 @@ export function OverlayApp() {
               visualState={p.visualState}
             />
           </div>
+
+          {/* Dance notes */}
+          {p.currentAction === "dance" && (
+            <DanceNotes
+              petX={p.x}
+              petY={p.y}
+              petSize={getPetRenderSize()}
+              isActive={true}
+            />
+          )}
 
           {/* Speech bubble */}
           {p.message && p.physicsState !== "flying" && p.physicsState !== "landed" && p.lifecycleState !== "evolving" && (
